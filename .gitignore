@@ -1,0 +1,5 @@
+/build
+/dist
+/wheelhouse
+/*.egg-info
+__pycache__
