@@ -38,6 +38,7 @@ converters: Tuple[Callable[[bytes], Any], ...] = (
     float,
     int,
     parse_str,
+    parse_str,
     parse_uuid,
     bool,
 )
@@ -58,11 +59,11 @@ def process_line_python(tsv_line: bytes) -> tuple:
 
 
 def process_record_c(tsv_record: tuple) -> tuple:
-    return parse_record("bdfisuz", tsv_record)
+    return parse_record("bdfissuz", tsv_record)
 
 
 def process_line_c(tsv_line: bytes) -> tuple:
-    return parse_line("bdfisuz", tsv_line)
+    return parse_line("bdfissuz", tsv_line)
 
 
 class TestPerformance(unittest.TestCase):
@@ -74,6 +75,7 @@ class TestPerformance(unittest.TestCase):
         b"0.5",
         b"-56",
         "árvíztűrő \\r\\n tükörfúrógép".encode("utf=8"),
+        b"Etiam pulvinar diam et diam lacinia, in consectetur neque consequat. Cras pharetra ut metus ac lobortis. Vestibulum interdum euismod odio sed cursus. Integer orci magna, mollis et mattis non, dignissim eu ante. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Maecenas sit amet lacinia enim. Quisque porttitor turpis eu tristique cursus. Pellentesque aliquam dui sit amet laoreet porta.",
         str(UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")).encode("ascii"),
         b"true",
     )

@@ -22,6 +22,37 @@ debug_print(__m128i value)
 #endif
 #endif
 
+inline bool
+is_escaped(const char* data, Py_ssize_t size)
+{
+#if defined(__AVX2__)
+    if (size >= 16)
+    {
+        __m128i tocmp =  _mm_set1_epi8('\\');
+        for (; size >= 16; size -= 16)
+        {
+            __m128i chunk = _mm_loadu_si128((__m128i const *)data);
+            __m128i results = _mm_cmpeq_epi8(chunk, tocmp);
+            if (_mm_movemask_epi8(results))
+            {
+                return true;
+            }
+            data += 16;
+        }
+    }
+#endif
+
+    for (; size > 0; --size)
+    {
+        if (*data == '\\')
+        {
+            return true;
+        }
+        data++;
+    }
+    return false;
+}
+
 #define TSV_NOT_LEN ~((Py_ssize_t)0)
 
 static Py_ssize_t
@@ -244,6 +275,10 @@ create_integer(const char *input_string, Py_ssize_t input_size)
 static PyObject *
 create_string(const char *input_string, Py_ssize_t input_size)
 {
+    if (!is_escaped(input_string, input_size)) {
+        return PyUnicode_FromStringAndSize(input_string, input_size);
+    }
+
     PyObject *result;
     char *output_string;
     Py_ssize_t output_size;
