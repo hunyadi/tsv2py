@@ -487,7 +487,11 @@ tsv_parse_record(PyObject *self, PyObject *args)
     Py_ssize_t k;
     for (k = 0; k < field_count; ++k)
     {
+#if defined(Py_LIMITED_API)
         PyObject *tsv_field = PyTuple_GetItem(tsv_record, k);
+#else
+        PyObject *tsv_field = PyTuple_GET_ITEM(tsv_record, k);
+#endif
         char *input_string;
         Py_ssize_t input_size;
 
@@ -508,7 +512,11 @@ tsv_parse_record(PyObject *self, PyObject *args)
             return NULL;
         }
 
+#if defined(Py_LIMITED_API)
         PyTuple_SetItem(py_record, k, py_field);
+#else
+        PyTuple_SET_ITEM(py_record, k, py_field);
+#endif
     }
 
     return py_record;
@@ -554,7 +562,11 @@ tsv_parse_line(PyObject *self, PyObject *args)
             return NULL;
         }
 
+#if defined(Py_LIMITED_API)
         PyTuple_SetItem(py_record, k, py_field);
+#else
+        PyTuple_SET_ITEM(py_record, k, py_field);
+#endif
 
         field_start = field_end + 1;
     }
@@ -576,7 +588,11 @@ tsv_parse_line(PyObject *self, PyObject *args)
         return NULL;
     }
 
+#if defined(Py_LIMITED_API)
     PyTuple_SetItem(py_record, field_count - 1, py_field);
+#else
+    PyTuple_SET_ITEM(py_record, field_count - 1, py_field);
+#endif
 
     return py_record;
 }
