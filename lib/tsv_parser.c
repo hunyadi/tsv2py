@@ -53,10 +53,8 @@ is_escaped(const char* data, Py_ssize_t size)
     return false;
 }
 
-#define TSV_NOT_LEN ~((Py_ssize_t)0)
-
-static Py_ssize_t
-unescape(const char *source, Py_ssize_t source_len, char **target)
+static bool
+unescape(const char *source, Py_ssize_t source_len, char **target, Py_ssize_t* target_len)
 {
     char *output = PyMem_Malloc(source_len);
 
@@ -64,7 +62,7 @@ unescape(const char *source, Py_ssize_t source_len, char **target)
     char *t = output;
 
     Py_ssize_t index = 0;
-    Py_ssize_t target_len = 0;
+    Py_ssize_t output_len = 0;
 
     while (index < source_len)
     {
@@ -75,40 +73,40 @@ unescape(const char *source, Py_ssize_t source_len, char **target)
 
             switch (*s)
             {
-            case '\\':
+            case '\\':  // ASCII 92
                 *t = '\\';
                 break;
-            case '0':
+            case '0':  // ASCII 48
                 *t = '\0';
                 break;
-            case 'b':
+            case 'b':  // ASCII 98
                 *t = '\b';
                 break;
-            case 'f':
+            case 'f':  // ASCII 102
                 *t = '\f';
                 break;
-            case 'n':
+            case 'n':  // ASCII 110
                 *t = '\n';
                 break;
-            case 'r':
+            case 'r': // ASCII 114
                 *t = '\r';
                 break;
-            case 't':
+            case 't':  // ASCII 116
                 *t = '\t';
                 break;
-            case 'v':
+            case 'v':  // ASCII 118
                 *t = '\v';
                 break;
             default:
                 PyMem_Free(output);
-                return TSV_NOT_LEN;
+                return false;
             }
-            ++target_len;
+            ++output_len;
         }
         else
         {
             *t = *s;
-            ++target_len;
+            ++output_len;
         }
 
         ++s;
@@ -117,7 +115,8 @@ unescape(const char *source, Py_ssize_t source_len, char **target)
     }
 
     *target = output;
-    return target_len;
+    *target_len = output_len;
+    return true;
 }
 
 #if defined(Py_LIMITED_API)
@@ -195,12 +194,12 @@ create_datetime(const char *input_string, Py_ssize_t input_size)
     const __m128i ascii_digit_mask = _mm_setr_epi8(15, 15, 15, 15, 0, 15, 15, 0, 15, 15, 0, 15, 15, 0, 15, 15); // 15 = 0x0F
     const __m128i spread_integers = _mm_and_si128(characters, ascii_digit_mask);
 
-    // group spread digits `YYYY-MM-DD HH:MM` into packed digits `YYYYMMDDHHMM----`
-    const __m128i mask = _mm_set_epi8(-1, -1, -1, -1, 15, 14, 12, 11, 9, 8, 6, 5, 3, 2, 1, 0);
+    // group spread digits `YYYY-MM-DD HH:MM:SS` into packed digits `YYYYMMDDHHMMSS--`
+    const __m128i mask = _mm_set_epi8(-1, -1, 18, 17, 15, 14, 12, 11, 9, 8, 6, 5, 3, 2, 1, 0);
     const __m128i packed_integers = _mm_shuffle_epi8(spread_integers, mask);
 
     // fuse neighboring digits into a single value
-    const __m128i weights = _mm_setr_epi8(10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 0, 0, 0, 0);
+    const __m128i weights = _mm_setr_epi8(10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 0, 0);
     const __m128i values = _mm_maddubs_epi16(packed_integers, weights);
 
     // extract values
@@ -283,8 +282,7 @@ create_string(const char *input_string, Py_ssize_t input_size)
     char *output_string;
     Py_ssize_t output_size;
 
-    output_size = unescape(input_string, input_size, &output_string);
-    if (output_size == TSV_NOT_LEN)
+    if (!unescape(input_string, input_size, &output_string, &output_size))
     {
         PyErr_SetString(PyExc_ValueError, "invalid character escape sequence, only \\0, \\b, \\f, \\n, \\r, \\t and \\v are allowed");
         return NULL;
