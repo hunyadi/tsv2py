@@ -124,7 +124,7 @@ class TestParseLine(unittest.TestCase):
         )
         self.assertEqual(parse_line("bdfisuz", tsv_record), py_record)
 
-    def test_length(self) -> None:
+    def test_field_count(self) -> None:
         tsv_record = b"0"
         parse_line("i", tsv_record)
         with self.assertRaises(ValueError):
@@ -136,6 +136,38 @@ class TestParseLine(unittest.TestCase):
         parse_line("ii", tsv_record)
         with self.assertRaises(ValueError):
             parse_line("iii", tsv_record)
+
+    def test_field_length(self) -> None:
+        # insufficient characters, no SIMD operation is executed
+        tsv_record = b"string"
+        parse_line("s", tsv_record)
+        tsv_record = b"\t\t\t\t\t"
+        parse_line("ssssss", tsv_record)
+
+        # no delimiter is found with SIMD operation
+        tsv_record = b"12345678901234567890123456789012\t..."
+        parse_line("ss", tsv_record)
+
+        # one delimiter is found with SIMD operation
+        tsv_record = b"1234567890123456789012345678901\t..."
+        parse_line("ss", tsv_record)
+
+        # several delimiters found with SIMD operation
+        tsv_record = b"1\t12\t123\t1234\t12345\t...12345678901234567890123456789012"
+        parse_line("ssssss", tsv_record)
+
+    def test_string_escape(self) -> None:
+        tsv_record = b""
+        parse_line("s", tsv_record)
+
+        tsv_record = (
+            r"árvíztűrő \0, \b, \f, \n, \r, \t and \v \\\\ tükörfúrógép".encode("utf-8")
+        )
+        parse_line("s", tsv_record)
+
+        tsv_record = r"árvíztűrő \N tükörfúrógép".encode("utf-8")
+        with self.assertRaises(ValueError):
+            parse_line("s", tsv_record)
 
 
 class TestParseFile(unittest.TestCase):

@@ -5,7 +5,7 @@ from typing import Any, BinaryIO, List, Tuple
 from . import parser
 
 
-def _type_to_format_char(typ: type) -> str:
+def type_to_format_char(typ: type) -> str:
     if typ is bool:
         return "z"
     elif typ is int:
@@ -24,11 +24,15 @@ def _type_to_format_char(typ: type) -> str:
         raise TypeError(f"conversion for type `{typ}` is not supported")
 
 
+def types_to_format_str(fields: Tuple[type, ...]) -> str:
+    return "".join(type_to_format_char(typ) for typ in fields)
+
+
 class Parser:
     _format: str
 
     def __init__(self, fields: Tuple[type, ...]) -> None:
-        self._format = "".join(_type_to_format_char(typ) for typ in fields)
+        self._format = types_to_format_str(fields)
 
     def parse_record(self, record: Tuple[bytes, ...]) -> Tuple[Any, ...]:
         """

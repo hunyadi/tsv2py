@@ -8,7 +8,7 @@
 
 #ifdef _DEBUG
 static void
-debug_print(__m128i value)
+debug_print_128(__m128i value)
 {
     uint8_t str[16];
     _mm_storeu_si128((__m128i *)str, value);
@@ -19,16 +19,34 @@ debug_print(__m128i value)
     }
     printf("\n");
 }
+
+static void
+debug_print_256(__m256i value)
+{
+    uint8_t str[32];
+    _mm256_storeu_si256((__m256i *)str, value);
+
+    for (int i = 0; i < 32; i++)
+    {
+        printf("0x%.2x ", str[i]);
+    }
+    printf("\n");
+}
 #endif
 #endif
 
+#if defined(Py_LIMITED_API)
+#define PyTuple_SET_ITEM(tpl, index, value) PyTuple_SetItem(tpl, index, value)
+#define PyTuple_GET_ITEM(tpl, index) PyTuple_GetItem(tpl, index)
+#endif
+
 inline bool
-is_escaped(const char* data, Py_ssize_t size)
+is_escaped(const char *data, Py_ssize_t size)
 {
 #if defined(__AVX2__)
     if (size >= 16)
     {
-        __m128i tocmp =  _mm_set1_epi8('\\');
+        __m128i tocmp = _mm_set1_epi8('\\');
         for (; size >= 16; size -= 16)
         {
             __m128i chunk = _mm_loadu_si128((__m128i const *)data);
@@ -54,7 +72,7 @@ is_escaped(const char* data, Py_ssize_t size)
 }
 
 static bool
-unescape(const char *source, Py_ssize_t source_len, char **target, Py_ssize_t* target_len)
+unescape(const char *source, Py_ssize_t source_len, char **target, Py_ssize_t *target_len)
 {
     char *output = PyMem_Malloc(source_len);
 
@@ -73,28 +91,28 @@ unescape(const char *source, Py_ssize_t source_len, char **target, Py_ssize_t* t
 
             switch (*s)
             {
-            case '\\':  // ASCII 92
+            case '\\': // ASCII 92
                 *t = '\\';
                 break;
-            case '0':  // ASCII 48
+            case '0': // ASCII 48
                 *t = '\0';
                 break;
-            case 'b':  // ASCII 98
+            case 'b': // ASCII 98
                 *t = '\b';
                 break;
-            case 'f':  // ASCII 102
+            case 'f': // ASCII 102
                 *t = '\f';
                 break;
-            case 'n':  // ASCII 110
+            case 'n': // ASCII 110
                 *t = '\n';
                 break;
             case 'r': // ASCII 114
                 *t = '\r';
                 break;
-            case 't':  // ASCII 116
+            case 't': // ASCII 116
                 *t = '\t';
                 break;
-            case 'v':  // ASCII 118
+            case 'v': // ASCII 118
                 *t = '\v';
                 break;
             default:
@@ -221,7 +239,7 @@ create_datetime(const char *input_string, Py_ssize_t input_size)
 {
     if (input_size != 20 || input_string[4] != '-' || input_string[7] != '-' || (input_string[10] != 'T' && input_string[10] != ' ') || input_string[13] != ':' || input_string[16] != ':' || input_string[19] != 'Z')
     {
-        PyErr_SetString(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDTHH:MM:SSZ` or `YYYY-MM-DD HH:MM:SSZ`");
+        PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDTHH:MM:SSZ` or `YYYY-MM-DD HH:MM:SSZ`; got: %.32s (len = %zd)", input_string, input_size);
         return NULL;
     }
 
@@ -243,7 +261,7 @@ create_float(const char *input_string, Py_ssize_t input_size)
 
     if (p != input_string + input_size)
     {
-        PyErr_SetString(PyExc_ValueError, "expected: a field with a floating-point number");
+        PyErr_Format(PyExc_ValueError, "expected: a field with a floating-point number; got: %.32s (len = %zd)", input_string, input_size);
         return NULL;
     }
 
@@ -264,7 +282,7 @@ create_integer(const char *input_string, Py_ssize_t input_size)
 
     if (len != input_size)
     {
-        PyErr_SetString(PyExc_ValueError, "expected: an integer field consisting of an optional sign and decimal digits");
+        PyErr_Format(PyExc_ValueError, "expected: an integer field consisting of an optional sign and decimal digits; got: %.32s (len = %zd)", input_string, input_size);
         return NULL;
     }
 
@@ -274,7 +292,8 @@ create_integer(const char *input_string, Py_ssize_t input_size)
 static PyObject *
 create_string(const char *input_string, Py_ssize_t input_size)
 {
-    if (!is_escaped(input_string, input_size)) {
+    if (!is_escaped(input_string, input_size))
+    {
         return PyUnicode_FromStringAndSize(input_string, input_size);
     }
 
@@ -306,7 +325,7 @@ create_boolean(const char *input_string, Py_ssize_t input_size)
     }
     else
     {
-        PyErr_SetString(PyExc_ValueError, "expected: a boolean field with a value of either `true` or `false`");
+        PyErr_Format(PyExc_ValueError, "expected: a boolean field with a value of either `true` or `false`; got: %.32s (len = %zd)", input_string, input_size);
         return NULL;
     }
 }
@@ -343,7 +362,7 @@ parse_uuid(__m256i x)
     return _mm256_castsi256_si128(a);
 }
 
-static bool
+inline bool
 parse_uuid_compact(const char *str, uuid_t id)
 {
     const __m256i x = _mm256_loadu_si256((__m256i *)str);
@@ -359,7 +378,7 @@ parse_uuid_compact(const char *str, uuid_t id)
  *
  * @see https://github.com/crashoz/uuid_v4
  */
-static bool
+inline bool
 parse_uuid_rfc_4122(const char *str, uuid_t id)
 {
     // Remove dashes and pack hexadecimal ASCII bytes in a 256-bit integer
@@ -374,7 +393,7 @@ parse_uuid_rfc_4122(const char *str, uuid_t id)
     return true;
 }
 #else
-static bool
+inline bool
 parse_uuid_compact(const char *str, uuid_t id)
 {
     int n = 0;
@@ -392,7 +411,7 @@ parse_uuid_compact(const char *str, uuid_t id)
     return n == 32;
 }
 
-static bool
+inline bool
 parse_uuid_rfc_4122(const char *str, uuid_t id)
 {
     int n = 0;
@@ -424,19 +443,19 @@ create_uuid(const char *input_string, Py_ssize_t input_size)
     case 32:
         if (!parse_uuid_compact(input_string, id))
         {
-            PyErr_SetString(PyExc_ValueError, "expected: a UUID string of 32 hexadecimal digits");
+            PyErr_Format(PyExc_ValueError, "expected: a UUID string of 32 hexadecimal digits; got: %.32s (len = %zd)", input_string, input_size);
             return NULL;
         }
         break;
     case 36:
         if (!parse_uuid_rfc_4122(input_string, id))
         {
-            PyErr_SetString(PyExc_ValueError, "expected: a UUID string in the 8-4-4-4-12 format, e.g. `f81d4fae-7dec-11d0-a765-00a0c91e6bf6`");
+            PyErr_Format(PyExc_ValueError, "expected: a UUID string in the 8-4-4-4-12 format, e.g. `f81d4fae-7dec-11d0-a765-00a0c91e6bf6`; got: %.32s (len = %zd)", input_string, input_size);
             return NULL;
         }
         break;
     default:
-        PyErr_SetString(PyExc_ValueError, "expected: a UUID string of 32 hexadecimal digits, or a UUID in the 8-4-4-4-12 format");
+        PyErr_Format(PyExc_ValueError, "expected: a UUID string of 32 hexadecimal digits, or a UUID in the 8-4-4-4-12 format; got: %.32s (len = %zd)", input_string, input_size);
         return NULL;
     }
 
@@ -492,6 +511,12 @@ create_optional_any(char field_type, const char *input_string, Py_ssize_t input_
 }
 
 static PyObject *
+create_optional_any_range(char field_type, const char *field_start, const char *field_end)
+{
+    return create_optional_any(field_type, field_start, field_end - field_start);
+}
+
+static PyObject *
 tsv_parse_record(PyObject *self, PyObject *args)
 {
     const char *field_types;
@@ -520,36 +545,31 @@ tsv_parse_record(PyObject *self, PyObject *args)
     Py_ssize_t k;
     for (k = 0; k < field_count; ++k)
     {
-#if defined(Py_LIMITED_API)
-        PyObject *tsv_field = PyTuple_GetItem(tsv_record, k);
-#else
         PyObject *tsv_field = PyTuple_GET_ITEM(tsv_record, k);
-#endif
         char *input_string;
         Py_ssize_t input_size;
 
         if (!PyBytes_Check(tsv_field))
         {
             PyErr_SetString(PyExc_TypeError, "expected: field value as a `bytes` object");
+            Py_DECREF(py_record);
             return NULL;
         }
 
         if (PyBytes_AsStringAndSize(tsv_field, &input_string, &input_size) < 0)
         {
+            Py_DECREF(py_record);
             return NULL;
         }
 
         PyObject *py_field = create_optional_any(field_types[k], input_string, input_size);
         if (!py_field)
         {
+            Py_DECREF(py_record);
             return NULL;
         }
 
-#if defined(Py_LIMITED_API)
-        PyTuple_SetItem(py_record, k, py_field);
-#else
         PyTuple_SET_ITEM(py_record, k, py_field);
-#endif
     }
 
     return py_record;
@@ -572,61 +592,91 @@ tsv_parse_line(PyObject *self, PyObject *args)
 
     const char *field_start = line_string;
     const char *field_end;
+    Py_ssize_t field_index = 0;
+
+    const char *scan_start = line_string;
+    Py_ssize_t chars_remain = line_size;
 
     py_record = PyTuple_New(field_count);
 
-    // Parse first n-1 fields (each terminated by `\t`)
-    Py_ssize_t k;
-    for (k = 0; k < field_count - 1; ++k)
+#if defined(__AVX2__)
+    __m256i tab = _mm256_set1_epi8('\t');
+    while (chars_remain >= 32)
     {
-        field_end = strchr(field_start, '\t');
-        if (field_end == NULL)
+        __m256i chunk = _mm256_loadu_si256((__m256i *)scan_start);
+        __m256i results = _mm256_cmpeq_epi8(chunk, tab);
+        unsigned int mask = _mm256_movemask_epi8(results);
+
+        while (mask)
         {
-            PyErr_SetString(PyExc_ValueError, "premature end of input");
-            return NULL;
+            unsigned int offset = _mm_tzcnt_32(mask);
+            mask &= ~(1 << offset);
+
+            field_end = scan_start + offset;
+
+            PyObject *py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
+            if (!py_field)
+            {
+                Py_DECREF(py_record);
+                return NULL;
+            }
+            PyTuple_SET_ITEM(py_record, field_index, py_field);
+
+            ++field_index;
+            if (field_index >= field_count)
+            {
+                PyErr_SetString(PyExc_ValueError, "too many fields in input");
+                Py_DECREF(py_record);
+                return NULL;
+            }
+
+            field_start = field_end + 1;
         }
 
-        const char *input_string = field_start;
-        Py_ssize_t input_size = field_end - field_start;
-
-        PyObject *py_field = create_optional_any(field_types[k], input_string, input_size);
-        if (!py_field)
-        {
-            return NULL;
-        }
-
-#if defined(Py_LIMITED_API)
-        PyTuple_SetItem(py_record, k, py_field);
-#else
-        PyTuple_SET_ITEM(py_record, k, py_field);
+        scan_start += 32;
+        chars_remain -= 32;
+    }
 #endif
 
+    while ((field_end = memchr(scan_start, '\t', chars_remain)) != NULL)
+    {
+        PyObject *py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
+        if (!py_field)
+        {
+            Py_DECREF(py_record);
+            return NULL;
+        }
+        PyTuple_SET_ITEM(py_record, field_index, py_field);
+
+        ++field_index;
+        if (field_index >= field_count)
+        {
+            PyErr_SetString(PyExc_ValueError, "too many fields in input");
+            Py_DECREF(py_record);
+            return NULL;
+        }
+
         field_start = field_end + 1;
+        scan_start = field_start;
+        chars_remain = line_size - (field_start - line_string);
     }
 
-    // Parse last field (terminated by end of input)
-    if (strchr(field_start, '\t') != NULL)
+    if (field_index != field_count - 1)
     {
-        PyErr_SetString(PyExc_ValueError, "too many fields in input");
+        PyErr_SetString(PyExc_ValueError, "premature end of input");
         return NULL;
     }
 
     field_end = line_string + line_size;
-    const char *input_string = field_start;
-    Py_ssize_t input_size = field_end - field_start;
 
-    PyObject *py_field = create_optional_any(field_types[field_count - 1], input_string, input_size);
+    PyObject *py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
     if (!py_field)
     {
+        Py_DECREF(py_record);
         return NULL;
     }
 
-#if defined(Py_LIMITED_API)
-    PyTuple_SetItem(py_record, field_count - 1, py_field);
-#else
-    PyTuple_SET_ITEM(py_record, field_count - 1, py_field);
-#endif
-
+    PyTuple_SET_ITEM(py_record, field_index, py_field);
     return py_record;
 }
 

@@ -1,6 +1,7 @@
 # If you have cloned the source code repository, use editable install to link the package catalog to the repository directory:
 # $ pip install -e . --config-settings editable_mode=strict
 
+import os
 import sys
 from typing import Tuple
 
@@ -20,12 +21,18 @@ class bdist_wheel_abi3(bdist_wheel):
 
 
 if sys.platform.startswith("win"):
-    compile_args = ["/arch:AVX2"]
+    compile_args = []
 else:
-    compile_args = [
-        "-mavx2",
-        "-fvisibility=hidden",
-    ]
+    compile_args = ["-fvisibility=hidden"]
+
+if os.getenv("TSV_AVX2", "1") == "1":
+    print("compiling with AVX2")
+    if sys.platform.startswith("win"):
+        compile_args.append("/arch:AVX2")
+    else:
+        compile_args.append("-mavx2")
+else:
+    print("compiling without AVX2")
 
 setup_args = dict(
     ext_modules=[

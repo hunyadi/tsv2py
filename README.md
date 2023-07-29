@@ -4,7 +4,7 @@
 
 This package offers a high-performance alternative to convert data between a TSV text file and Python objects. The parser can read a TSV record into a Python tuple consisting of built-in Python types, one for each field. The generator can produce a TSV record from a tuple.
 
-## Quickstart
+## Quick start
 
 ```python
 from tsv.helper import Parser
@@ -59,4 +59,8 @@ The parser understands the following Python types:
 * `str`. TSV escape sequences are reversed before the data is passed to Python as a `str`. NUL bytes are not allowed.
 * `uuid.UUID`. The input has to comply with RFC 4122, or be a string of 32 hexadecimal digits.
 
-Internally, the implementation uses AVX2 instructions to parse RFC 3339 date-time strings into Python `datetime` objects, and RFC 4122 UUID strings or 32-digit hexadecimal strings into Python `UUID` objects.
+Internally, the implementation uses AVX2 instructions to
+
+* parse RFC 3339 date-time strings into Python `datetime` objects,
+* parse RFC 4122 UUID strings or 32-digit hexadecimal strings into Python `UUID` objects,
+* and find `\t` delimiters between fields in a line.
