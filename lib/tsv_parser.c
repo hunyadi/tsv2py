@@ -35,6 +35,10 @@ debug_print_256(__m256i value)
 #endif
 #endif
 
+#if defined(_WIN32)
+#define _mm_tzcnt_32(x) _tzcnt_u32(x)
+#endif
+
 #if defined(Py_LIMITED_API)
 #define PyTuple_SET_ITEM(tpl, index, value) PyTuple_SetItem(tpl, index, value)
 #define PyTuple_GET_ITEM(tpl, index) PyTuple_GetItem(tpl, index)
