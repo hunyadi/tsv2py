@@ -37,6 +37,9 @@ class Parser:
     def parse_record(self, record: Tuple[bytes, ...]) -> Tuple[Any, ...]:
         """
         Parses a tuple of byte arrays representing a TSV record into a tuple of Python objects.
+
+        :param record: A tuple of `bytes` objects, in which each tuple element corresponds to a field.
+        :returns: A tuple of Python objects, corresponding to a TSV record.
         """
 
         return parser.parse_record(self._format, record)
@@ -49,9 +52,24 @@ class Parser:
         ```
         return self.parse_record(tuple(line.split(b"\\t")))
         ```
+
+        :param line: A `bytes` object of character data, corresponding to a full record in TSV.
+        :returns: A tuple of Python objects, corresponding to a TSV record.
         """
 
         return parser.parse_line(self._format, line)
 
     def parse_file(self, file: BinaryIO) -> List[Tuple[Any, ...]]:
-        return [self.parse_line(line) for line in file]
+        """
+        Parses a TSV file into a list of tuples of Python objects.
+
+        Equivalent to
+        ```
+        return [self.parse_line(line.rstrip()) for line in file]
+        ```
+
+        :param file: A file-like object opened in binary mode.
+        :returns: A list of tuples, in which each tuple element is a Python object.
+        """
+
+        return parser.parse_file(self._format, file)

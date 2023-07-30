@@ -319,11 +319,11 @@ create_string(const char *input_string, Py_ssize_t input_size)
 static PyObject *
 create_boolean(const char *input_string, Py_ssize_t input_size)
 {
-    if (input_size == 4 && !strcmp(input_string, "true"))
+    if (input_size == 4 && !memcmp(input_string, "true", 4))
     {
         Py_RETURN_TRUE;
     }
-    else if (input_size == 5 && !strcmp(input_string, "false"))
+    else if (input_size == 5 && !memcmp(input_string, "false", 5))
     {
         Py_RETURN_FALSE;
     }
@@ -580,20 +580,8 @@ tsv_parse_record(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-tsv_parse_line(PyObject *self, PyObject *args)
+parse_line(const char *field_types, Py_ssize_t field_count, const char *line_string, Py_ssize_t line_size)
 {
-    const char *field_types;
-    Py_ssize_t field_count;
-    const char *line_string;
-    Py_ssize_t line_size;
-
-    PyObject *py_record;
-
-    if (!PyArg_ParseTuple(args, "s#y#", &field_types, &field_count, &line_string, &line_size))
-    {
-        return NULL;
-    }
-
     const char *field_start = line_string;
     const char *field_end;
     Py_ssize_t field_index = 0;
@@ -601,7 +589,7 @@ tsv_parse_line(PyObject *self, PyObject *args)
     const char *scan_start = line_string;
     Py_ssize_t chars_remain = line_size;
 
-    py_record = PyTuple_New(field_count);
+    PyObject *py_record = PyTuple_New(field_count);
 
 #if defined(__AVX2__)
     __m256i tab = _mm256_set1_epi8('\t');
@@ -629,7 +617,7 @@ tsv_parse_line(PyObject *self, PyObject *args)
             ++field_index;
             if (field_index >= field_count)
             {
-                PyErr_SetString(PyExc_ValueError, "too many fields in input");
+                PyErr_SetString(PyExc_ValueError, "too many fields in record input");
                 Py_DECREF(py_record);
                 return NULL;
             }
@@ -655,7 +643,7 @@ tsv_parse_line(PyObject *self, PyObject *args)
         ++field_index;
         if (field_index >= field_count)
         {
-            PyErr_SetString(PyExc_ValueError, "too many fields in input");
+            PyErr_SetString(PyExc_ValueError, "too many fields in record input");
             Py_DECREF(py_record);
             return NULL;
         }
@@ -667,7 +655,7 @@ tsv_parse_line(PyObject *self, PyObject *args)
 
     if (field_index != field_count - 1)
     {
-        PyErr_SetString(PyExc_ValueError, "premature end of input");
+        PyErr_SetString(PyExc_ValueError, "premature end of input when parsing record");
         return NULL;
     }
 
@@ -684,9 +672,139 @@ tsv_parse_line(PyObject *self, PyObject *args)
     return py_record;
 }
 
+static PyObject *
+tsv_parse_line(PyObject *self, PyObject *args)
+{
+    const char *field_types;
+    Py_ssize_t field_count;
+    const char *line_string;
+    Py_ssize_t line_size;
+
+    if (!PyArg_ParseTuple(args, "s#y#", &field_types, &field_count, &line_string, &line_size))
+    {
+        return NULL;
+    }
+
+    return parse_line(field_types, field_count, line_string, line_size);
+}
+
+static PyObject *
+tsv_parse_file(PyObject *self, PyObject *args)
+{
+    const char *field_types;
+    Py_ssize_t field_count;
+    PyObject *obj;
+
+    if (!PyArg_ParseTuple(args, "s#O", &field_types, &field_count, &obj))
+    {
+        return NULL;
+    }
+
+    /* get the `read` method of the passed object */
+    PyObject *read_method;
+    if ((read_method = PyObject_GetAttrString(obj, "read")) == NULL)
+    {
+        return NULL;
+    }
+
+    char cache_data[8192];
+    Py_ssize_t cache_size = 0;
+
+    PyObject *result = PyList_New(0);
+    while (true)
+    {
+        /* call `read()` */
+        PyObject *data;
+        if ((data = PyObject_CallFunction(read_method, "i", 8192)) == NULL)
+        {
+            Py_DECREF(result);
+            Py_DECREF(read_method);
+            return NULL;
+        }
+
+        /* check for EOF */
+        if (PySequence_Length(data) == 0)
+        {
+            Py_DECREF(data);
+            break;
+        }
+
+        if (!PyBytes_Check(data))
+        {
+            Py_DECREF(data);
+            Py_DECREF(result);
+            Py_DECREF(read_method);
+            PyErr_SetString(PyExc_IOError, "file must be opened in binary mode");
+            return NULL;
+        }
+
+        /* extract underlying buffer data */
+        char *buf;
+        Py_ssize_t len;
+        PyBytes_AsStringAndSize(data, &buf, &len);
+
+        Py_ssize_t offset = 0;
+        const char *buf_beg = buf;
+        const char *buf_end;
+        while ((buf_end = memchr(buf_beg, '\n', len - offset)) != NULL)
+        {
+            Py_ssize_t chunk_size = buf_end - buf_beg;
+            const char *line_string;
+            Py_ssize_t line_size;
+
+            if (cache_size > 0)
+            {
+                memcpy(cache_data + cache_size, buf_beg, chunk_size);
+                if (cache_size + chunk_size > (Py_ssize_t)sizeof(cache_data))
+                {
+                    PyErr_SetString(PyExc_RuntimeError, "insufficient cache size to load record");
+                    return NULL;
+                }
+                cache_size += chunk_size;
+
+                line_string = cache_data;
+                line_size = cache_size;
+            }
+            else
+            {
+                line_string = buf_beg;
+                line_size = buf_end - buf_beg;
+            }
+
+            PyObject *item = parse_line(field_types, field_count, line_string, line_size);
+            if (!item)
+            {
+                Py_DECREF(data);
+                Py_DECREF(result);
+                Py_DECREF(read_method);
+                return NULL;
+            }
+
+            PyList_Append(result, item);
+            Py_DECREF(item);
+
+            cache_size = 0;
+
+            offset += buf_end - buf_beg + 1;
+            buf_beg = buf_end + 1;
+        }
+
+        memcpy(cache_data + cache_size, buf_beg, len - offset);
+        cache_size += len - offset;
+
+        /* cleanup */
+        Py_DECREF(data);
+    }
+
+    /* cleanup */
+    Py_DECREF(read_method);
+    return result;
+}
+
 static PyMethodDef TsvParserMethods[] = {
     {"parse_record", tsv_parse_record, METH_VARARGS, "Parses a tuple of byte arrays representing a TSV record into a tuple of Python objects."},
     {"parse_line", tsv_parse_line, METH_VARARGS, "Parses a line representing a TSV record into a tuple of Python objects."},
+    {"parse_file", tsv_parse_file, METH_VARARGS, "Parses a TSV file into a list consisting of tuples of Python objects."},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef TsvParserModule = {

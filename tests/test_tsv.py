@@ -1,4 +1,5 @@
 import os.path
+import time
 import unittest
 from datetime import datetime
 from uuid import UUID
@@ -189,15 +190,23 @@ class TestParseFile(unittest.TestCase):
         )
 
         with open(self.tsv_path, "wb") as f:
-            f.write(b"\t".join(field.encode("utf-8") for field in tsv_record))
+            for _ in range(100000):
+                f.write(b"\t".join(field.encode("utf-8") for field in tsv_record))
+                f.write(b"\n")
 
     def tearDown(self) -> None:
         os.remove(self.tsv_path)
 
     def test_file(self) -> None:
         parser = Parser((bytes, datetime, float, int, str, UUID, bool))
+
+        start = time.perf_counter_ns()
         with open(self.tsv_path, "rb") as f:
             py_records = parser.parse_file(f)
+        end = time.perf_counter_ns()
+
+        elapsed_time = (end - start) / 10**9
+        print(f"Parsing file took {elapsed_time:.03f} s.")
 
         py_record = (
             "árvíztűrő tükörfúrógép".encode("utf-8"),
@@ -208,13 +217,13 @@ class TestParseFile(unittest.TestCase):
             UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
             True,
         )
-        self.assertEqual(py_records, [py_record])
+        self.assertEqual(py_records, [py_record] * 100000)
 
     def test_line(self) -> None:
         parser = Parser((bytes, datetime, float, int, str, UUID, bool))
         with open(self.tsv_path, "rb") as f:
             for line in f:
-                parser.parse_line(line)
+                parser.parse_line(line[:-1])
 
 
 if __name__ == "__main__":
