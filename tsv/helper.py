@@ -1,11 +1,44 @@
 import datetime
+import typing
 import uuid
 from typing import Any, BinaryIO, List, Tuple
 
 from . import parser
 
 
+def escape(s: bytes) -> bytes:
+    "Replaces special characters in a string with their escape sequences."
+
+    return (
+        s.replace(b"\\", b"\\\\")
+        .replace(b"\x00", b"\\0")
+        .replace(b"\b", b"\\b")
+        .replace(b"\f", b"\\f")
+        .replace(b"\n", b"\\n")
+        .replace(b"\r", b"\\r")
+        .replace(b"\t", b"\\t")
+        .replace(b"\v", b"\\v")
+    )
+
+
+def unescape(s: bytes) -> bytes:
+    "Replaces escape sequences in a string with the characters they correspond to."
+
+    return (
+        s.replace(b"\\0", b"\x00")
+        .replace(b"\\b", b"\b")
+        .replace(b"\\f", b"\f")
+        .replace(b"\\n", b"\n")
+        .replace(b"\\r", b"\r")
+        .replace(b"\\t", b"\t")
+        .replace(b"\\v", b"\v")
+        .replace(b"\\\\", b"\\")
+    )
+
+
 def type_to_format_char(typ: type) -> str:
+    "Returns the type format character for a Python type."
+
     if typ is bool:
         return "z"
     elif typ is int:
@@ -25,10 +58,48 @@ def type_to_format_char(typ: type) -> str:
 
 
 def types_to_format_str(fields: Tuple[type, ...]) -> str:
+    "Returns the type format string for a tuple of Python types."
+
     return "".join(type_to_format_char(typ) for typ in fields)
 
 
+def generate_value(val: Any) -> bytes:
+    "Returns the TSV representation of a Python object."
+
+    typ = type(val)
+    if typ is bool:
+        return b"true" if val else b"false"
+    elif typ is int or typ is float or typ is uuid.UUID:
+        return str(val).encode("ascii")
+    elif typ is str:
+        return escape(typing.cast(str, val).encode("utf-8"))
+    elif typ is datetime.datetime:
+        return (
+            typing.cast(datetime.datetime, val)
+            .replace(tzinfo=datetime.timezone.utc)
+            .isoformat()
+            .encode("ascii")
+            .replace(b"+00:00", b"Z")
+        )
+    elif typ is bytes:
+        return escape(typing.cast(bytes, val))
+    else:
+        raise TypeError(f"conversion for type `{typ}` is not supported")
+
+
+class Generator:
+    "Generates TSV data from Python objects."
+
+    def generate_record(self, record: Tuple[Any, ...]) -> Tuple[bytes, ...]:
+        return tuple(generate_value(field) for field in record)
+
+    def generate_line(self, record: Tuple[Any, ...]) -> bytes:
+        return b"\t".join(generate_value(field) for field in record)
+
+
 class Parser:
+    "Parses TSV data into Python objects."
+
     _format: str
 
     def __init__(self, fields: Tuple[type, ...]) -> None:

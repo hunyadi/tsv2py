@@ -5,7 +5,7 @@ from timeit import timeit
 from typing import Any, Callable, Tuple
 from uuid import UUID
 
-from tsv.helper import types_to_format_str
+from tsv.helper import types_to_format_str, unescape
 from tsv.parser import parse_line, parse_record
 
 
@@ -18,16 +18,7 @@ def parse_datetime(s: bytes) -> datetime:
 
 
 def parse_str(s: bytes) -> str:
-    return (
-        s.replace(b"\\0", b"\0")
-        .replace(b"\\b", b"\b")
-        .replace(b"\\f", b"\f")
-        .replace(b"\\n", b"\n")
-        .replace(b"\\r", b"\r")
-        .replace(b"\\t", b"\t")
-        .replace(b"\\v", b"\v")
-        .decode("utf-8")
-    )
+    return unescape(s).decode("utf-8")
 
 
 def parse_uuid(s: bytes) -> UUID:

@@ -1,7 +1,7 @@
-import os.path
 import time
 import unittest
 from datetime import datetime
+from io import BytesIO
 from uuid import UUID
 
 from tsv.helper import Parser
@@ -172,11 +172,7 @@ class TestParseLine(unittest.TestCase):
 
 
 class TestParseFile(unittest.TestCase):
-    tsv_path: str
-
-    def __init__(self, methodName: str = "runTest") -> None:
-        super().__init__(methodName)
-        self.tsv_path = os.path.join(os.path.dirname(__file__), "test.tsv")
+    tsv_data: bytes
 
     def setUp(self) -> None:
         tsv_record = (
@@ -189,19 +185,17 @@ class TestParseFile(unittest.TestCase):
             "true",
         )
 
-        with open(self.tsv_path, "wb") as f:
+        with BytesIO() as f:
             for _ in range(100000):
                 f.write(b"\t".join(field.encode("utf-8") for field in tsv_record))
                 f.write(b"\n")
-
-    def tearDown(self) -> None:
-        os.remove(self.tsv_path)
+            self.tsv_data = f.getvalue()
 
     def test_file(self) -> None:
         parser = Parser((bytes, datetime, float, int, str, UUID, bool))
 
         start = time.perf_counter_ns()
-        with open(self.tsv_path, "rb") as f:
+        with BytesIO(self.tsv_data) as f:
             py_records = parser.parse_file(f)
         end = time.perf_counter_ns()
 
@@ -221,7 +215,7 @@ class TestParseFile(unittest.TestCase):
 
     def test_line(self) -> None:
         parser = Parser((bytes, datetime, float, int, str, UUID, bool))
-        with open(self.tsv_path, "rb") as f:
+        with BytesIO(self.tsv_data) as f:
             for line in f:
                 parser.parse_line(line[:-1])
 

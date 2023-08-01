@@ -260,10 +260,16 @@ create_datetime(const char *input_string, Py_ssize_t input_size)
 static PyObject *
 create_float(const char *input_string, Py_ssize_t input_size)
 {
-    char *p;
-    double value = PyOS_string_to_double(input_string, &p, NULL);
+    char *str = PyMem_Malloc(input_size + 1);
+    memcpy(str, input_string, input_size);
+    str[input_size] = '\0'; // include terminating NUL byte
 
-    if (p != input_string + input_size)
+    char *p;
+    double value = PyOS_string_to_double(str, &p, NULL);
+    Py_ssize_t len = p - str;
+    PyMem_Free(str);
+
+    if (len != input_size)
     {
         PyErr_Format(PyExc_ValueError, "expected: a field with a floating-point number; got: %.32s (len = %zd)", input_string, input_size);
         return NULL;
@@ -294,14 +300,13 @@ create_integer(const char *input_string, Py_ssize_t input_size)
 }
 
 static PyObject *
-create_string(const char *input_string, Py_ssize_t input_size)
+create_bytes(const char *input_string, Py_ssize_t input_size)
 {
     if (!is_escaped(input_string, input_size))
     {
-        return PyUnicode_FromStringAndSize(input_string, input_size);
+        return PyBytes_FromStringAndSize(input_string, input_size);
     }
 
-    PyObject *result;
     char *output_string;
     Py_ssize_t output_size;
 
@@ -311,7 +316,29 @@ create_string(const char *input_string, Py_ssize_t input_size)
         return NULL;
     }
 
-    result = PyUnicode_FromStringAndSize(output_string, output_size);
+    PyObject *result = PyBytes_FromStringAndSize(output_string, output_size);
+    PyMem_Free(output_string);
+    return result;
+}
+
+static PyObject *
+create_string(const char *input_string, Py_ssize_t input_size)
+{
+    if (!is_escaped(input_string, input_size))
+    {
+        return PyUnicode_FromStringAndSize(input_string, input_size);
+    }
+
+    char *output_string;
+    Py_ssize_t output_size;
+
+    if (!unescape(input_string, input_size, &output_string, &output_size))
+    {
+        PyErr_SetString(PyExc_ValueError, "invalid character escape sequence, only \\0, \\b, \\f, \\n, \\r, \\t and \\v are allowed");
+        return NULL;
+    }
+
+    PyObject *result = PyUnicode_FromStringAndSize(output_string, output_size);
     PyMem_Free(output_string);
     return result;
 }
@@ -473,7 +500,7 @@ create_any(char field_type, const char *input_string, Py_ssize_t input_size)
     switch (field_type)
     {
     case 'b':
-        return PyBytes_FromStringAndSize(input_string, input_size);
+        return create_bytes(input_string, input_size);
 
     case 'd':
         return create_datetime(input_string, input_size);
