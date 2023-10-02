@@ -1,5 +1,6 @@
 import datetime
-import typing
+import enum
+import ipaddress
 import uuid
 from typing import Any, BinaryIO, List, Tuple
 
@@ -66,25 +67,29 @@ def types_to_format_str(fields: Tuple[type, ...]) -> str:
 def generate_value(val: Any) -> bytes:
     "Returns the TSV representation of a Python object."
 
-    typ = type(val)
-    if typ is bool:
+    if isinstance(val, bool):
         return b"true" if val else b"false"
-    elif typ is int or typ is float or typ is uuid.UUID:
+    elif isinstance(val, (int, float, uuid.UUID)):
         return str(val).encode("ascii")
-    elif typ is str:
-        return escape(typing.cast(str, val).encode("utf-8"))
-    elif typ is datetime.datetime:
+    elif isinstance(val, str):
+        return escape(val.encode("utf-8"))
+    elif isinstance(val, (datetime.time, datetime.datetime)):
         return (
-            typing.cast(datetime.datetime, val)
-            .replace(tzinfo=datetime.timezone.utc)
+            val.replace(tzinfo=datetime.timezone.utc)
             .isoformat()
             .encode("ascii")
             .replace(b"+00:00", b"Z")
         )
-    elif typ is bytes:
-        return escape(typing.cast(bytes, val))
+    elif isinstance(val, datetime.date):
+        return val.isoformat().encode("ascii")
+    elif isinstance(val, bytes):
+        return escape(val)
+    elif isinstance(val, enum.Enum):
+        return generate_value(val.value)
+    elif isinstance(val, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
+        return val.compressed.encode("ascii")
     else:
-        raise TypeError(f"conversion for type `{typ}` is not supported")
+        raise TypeError(f"conversion for value `{val}` is not supported")
 
 
 class Generator:
