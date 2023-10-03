@@ -1,6 +1,7 @@
 import random
 import unittest
 from datetime import datetime, timezone
+from ipaddress import IPv4Address, IPv6Address
 from timeit import timeit
 from typing import Any, Callable, Tuple
 from uuid import UUID
@@ -25,6 +26,14 @@ def parse_uuid(s: bytes) -> UUID:
     return UUID(s.decode("ascii"))
 
 
+def parse_ipv4addr(s: bytes) -> IPv4Address:
+    return IPv4Address(s.decode("ascii"))
+
+
+def parse_ipv6addr(s: bytes) -> IPv6Address:
+    return IPv6Address(s.decode("ascii"))
+
+
 def type_to_converter(typ: type) -> Callable[[bytes], Any]:
     if typ is bool:
         return bool
@@ -40,6 +49,10 @@ def type_to_converter(typ: type) -> Callable[[bytes], Any]:
         return parse_uuid
     elif typ is bytes:
         return bytes
+    elif typ is IPv4Address:
+        return parse_ipv4addr
+    elif typ is IPv6Address:
+        return parse_ipv6addr
     else:
         raise TypeError(f"conversion for type `{typ}` is not supported")
 
@@ -94,7 +107,18 @@ class Tester:
 class TestPerformance(unittest.TestCase):
     iterations: int = 100000
 
-    tsv_types: tuple = (str, datetime, float, int, str, str, UUID, bool)
+    tsv_types: tuple = (
+        str,
+        datetime,
+        float,
+        int,
+        str,
+        str,
+        UUID,
+        bool,
+        IPv4Address,
+        IPv6Address,
+    )
     tsv_record: tuple = (
         "árvíztűrő tükörfúrógép".encode("utf-8"),
         b"1989-10-23T23:59:59Z",
@@ -104,6 +128,8 @@ class TestPerformance(unittest.TestCase):
         b"Etiam pulvinar diam et diam lacinia, in consectetur neque consequat. Cras pharetra ut metus ac lobortis. Vestibulum interdum euismod odio sed cursus. Integer orci magna, mollis et mattis non, dignissim eu ante. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Maecenas sit amet lacinia enim. Quisque porttitor turpis eu tristique cursus. Pellentesque aliquam dui sit amet laoreet porta.",
         str(UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")).encode("ascii"),
         b"true",
+        b"192.0.2.0",
+        b"2001:DB8:0:0:8:800:200C:417A",
     )
 
     tester: Tester

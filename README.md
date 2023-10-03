@@ -10,7 +10,7 @@ This package offers a high-performance alternative to convert data between a TSV
 from tsv.helper import Parser
 
 # specify the column structure
-parser = Parser(fields=(bytes, datetime, float, int, str, UUID, bool))
+parser = Parser(fields=(bytes, date, datetime, float, int, str, UUID, bool))
 
 # read and parse an entire file 
 with open(tsv_path, "rb") as f:
@@ -53,11 +53,14 @@ The parser understands the following Python types:
 * `None`. This special value is returned for the TSV escape sequence `\N`.
 * `bool`. A literal `true` or `false` is converted into a boolean value.
 * `bytes`. TSV escape sequences are reversed before the data is passed to Python as a `bytes` object. NUL bytes are permitted.
+* `date`. The input has to conform to the format `YYYY-MM-DD`.
 * `datetime`. The input has to comply with RFC 3339 and ISO 8601. The timezone must be UTC (a.k.a. suffix `Z`).
-* `float`.
+* `float`. Interpreted as double precision floating point numbers.
 * `int`. Arbitrary-length integers are allowed.
 * `str`. TSV escape sequences are reversed before the data is passed to Python as a `str`. NUL bytes are not allowed.
 * `uuid.UUID`. The input has to comply with RFC 4122, or be a string of 32 hexadecimal digits.
+* `ipaddress.IPv4Address`.
+* `ipaddress.IPv6Address`.
 
 Internally, the implementation uses AVX2 instructions to
 

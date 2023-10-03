@@ -49,11 +49,17 @@ def type_to_format_char(typ: type) -> str:
     elif typ is str:
         return "s"
     elif typ is datetime.datetime:
+        return "t"
+    elif typ is datetime.date:
         return "d"
     elif typ is uuid.UUID:
         return "u"
     elif typ is bytes:
         return "b"
+    elif typ is ipaddress.IPv4Address:
+        return "4"
+    elif typ is ipaddress.IPv6Address:
+        return "6"
     else:
         raise TypeError(f"conversion for type `{typ}` is not supported")
 

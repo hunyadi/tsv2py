@@ -11,7 +11,7 @@ static void
 debug_print_128(__m128i value)
 {
     uint8_t str[16];
-    _mm_storeu_si128((__m128i *)str, value);
+    _mm_storeu_si128((__m128i*)str, value);
 
     for (int i = 0; i < 16; i++)
     {
@@ -24,7 +24,7 @@ static void
 debug_print_256(__m256i value)
 {
     uint8_t str[32];
-    _mm256_storeu_si256((__m256i *)str, value);
+    _mm256_storeu_si256((__m256i*)str, value);
 
     for (int i = 0; i < 32; i++)
     {
@@ -45,7 +45,7 @@ debug_print_256(__m256i value)
 #endif
 
 inline bool
-is_escaped(const char *data, Py_ssize_t size)
+is_escaped(const char* data, Py_ssize_t size)
 {
 #if defined(__AVX2__)
     if (size >= 16)
@@ -53,7 +53,7 @@ is_escaped(const char *data, Py_ssize_t size)
         __m128i tocmp = _mm_set1_epi8('\\');
         for (; size >= 16; size -= 16)
         {
-            __m128i chunk = _mm_loadu_si128((__m128i const *)data);
+            __m128i chunk = _mm_loadu_si128((__m128i const*)data);
             __m128i results = _mm_cmpeq_epi8(chunk, tocmp);
             if (_mm_movemask_epi8(results))
             {
@@ -76,12 +76,12 @@ is_escaped(const char *data, Py_ssize_t size)
 }
 
 static bool
-unescape(const char *source, Py_ssize_t source_len, char **target, Py_ssize_t *target_len)
+unescape(const char* source, Py_ssize_t source_len, char** target, Py_ssize_t* target_len)
 {
-    char *output = PyMem_Malloc(source_len);
+    char* output = PyMem_Malloc(source_len);
 
-    const char *s = source;
-    char *t = output;
+    const char* s = source;
+    char* t = output;
 
     Py_ssize_t index = 0;
     Py_ssize_t output_len = 0;
@@ -142,11 +142,37 @@ unescape(const char *source, Py_ssize_t source_len, char **target, Py_ssize_t *t
 }
 
 #if defined(Py_LIMITED_API)
-static PyObject *datetime_module;
-static PyObject *datetime_constructor;
+static PyObject* datetime_module;
+static PyObject* date_constructor;
+static PyObject* datetime_constructor;
 #endif
 
-inline PyObject *
+inline PyObject*
+python_date(int year, int month, int day)
+{
+#if defined(Py_LIMITED_API)
+    return PyObject_CallFunction(date_constructor, "iii", year, month, day);
+#else
+    return PyDate_FromDate(year, month, day);
+#endif
+}
+
+static PyObject*
+create_date(const char* input_string, Py_ssize_t input_size)
+{
+    if (input_size != 10 || input_string[4] != '-' || input_string[7] != '-')
+    {
+        PyErr_Format(PyExc_ValueError, "expected: a date field of the format `YYYY-MM-DD`; got: %.32s (len = %zd)", input_string, input_size);
+        return NULL;
+    }
+
+    int year = atoi(input_string);
+    int month = atoi(input_string + 5);
+    int day = atoi(input_string + 8);
+    return python_date(year, month, day);
+}
+
+inline PyObject*
 python_datetime(int year, int month, int day, int hour, int minute, int second)
 {
 #if defined(Py_LIMITED_API)
@@ -201,10 +227,10 @@ is_valid_date_hour_minute(__m128i characters)
  *
  * @see https://movermeyer.com/2023-01-04-rfc-3339-simd/
  */
-static PyObject *
-create_datetime(const char *input_string, Py_ssize_t input_size)
+static PyObject*
+create_datetime(const char* input_string, Py_ssize_t input_size)
 {
-    const __m128i characters = _mm_loadu_si128((__m128i *)input_string);
+    const __m128i characters = _mm_loadu_si128((__m128i*)input_string);
 
     if (!is_valid_date_hour_minute(characters) || input_string[16] != ':' || input_string[19] != 'Z')
     {
@@ -226,7 +252,7 @@ create_datetime(const char *input_string, Py_ssize_t input_size)
 
     // extract values
     char result[16];
-    _mm_storeu_si128((__m128i *)result, values);
+    _mm_storeu_si128((__m128i*)result, values);
 
     int year = (result[0] * 100) + result[2];
     int month = result[4];
@@ -238,8 +264,8 @@ create_datetime(const char *input_string, Py_ssize_t input_size)
     return python_datetime(year, month, day, hour, minute, second);
 }
 #else
-static PyObject *
-create_datetime(const char *input_string, Py_ssize_t input_size)
+static PyObject*
+create_datetime(const char* input_string, Py_ssize_t input_size)
 {
     if (input_size != 20 || input_string[4] != '-' || input_string[7] != '-' || (input_string[10] != 'T' && input_string[10] != ' ') || input_string[13] != ':' || input_string[16] != ':' || input_string[19] != 'Z')
     {
@@ -257,14 +283,14 @@ create_datetime(const char *input_string, Py_ssize_t input_size)
 }
 #endif
 
-static PyObject *
-create_float(const char *input_string, Py_ssize_t input_size)
+static PyObject*
+create_float(const char* input_string, Py_ssize_t input_size)
 {
-    char *str = PyMem_Malloc(input_size + 1);
+    char* str = PyMem_Malloc(input_size + 1);
     memcpy(str, input_string, input_size);
     str[input_size] = '\0'; // include terminating NUL byte
 
-    char *p;
+    char* p;
     double value = PyOS_string_to_double(str, &p, NULL);
     Py_ssize_t len = p - str;
     PyMem_Free(str);
@@ -278,15 +304,15 @@ create_float(const char *input_string, Py_ssize_t input_size)
     return PyFloat_FromDouble(value);
 }
 
-static PyObject *
-create_integer(const char *input_string, Py_ssize_t input_size)
+static PyObject*
+create_integer(const char* input_string, Py_ssize_t input_size)
 {
-    char *str = PyMem_Malloc(input_size + 1);
+    char* str = PyMem_Malloc(input_size + 1);
     memcpy(str, input_string, input_size);
     str[input_size] = '\0'; // include terminating NUL byte
 
-    char *p;
-    PyObject *result = PyLong_FromString(str, &p, 10);
+    char* p;
+    PyObject* result = PyLong_FromString(str, &p, 10);
     Py_ssize_t len = p - str;
     PyMem_Free(str);
 
@@ -299,15 +325,15 @@ create_integer(const char *input_string, Py_ssize_t input_size)
     return result;
 }
 
-static PyObject *
-create_bytes(const char *input_string, Py_ssize_t input_size)
+static PyObject*
+create_bytes(const char* input_string, Py_ssize_t input_size)
 {
     if (!is_escaped(input_string, input_size))
     {
         return PyBytes_FromStringAndSize(input_string, input_size);
     }
 
-    char *output_string;
+    char* output_string;
     Py_ssize_t output_size;
 
     if (!unescape(input_string, input_size, &output_string, &output_size))
@@ -316,20 +342,20 @@ create_bytes(const char *input_string, Py_ssize_t input_size)
         return NULL;
     }
 
-    PyObject *result = PyBytes_FromStringAndSize(output_string, output_size);
+    PyObject* result = PyBytes_FromStringAndSize(output_string, output_size);
     PyMem_Free(output_string);
     return result;
 }
 
-static PyObject *
-create_string(const char *input_string, Py_ssize_t input_size)
+static PyObject*
+create_string(const char* input_string, Py_ssize_t input_size)
 {
     if (!is_escaped(input_string, input_size))
     {
         return PyUnicode_FromStringAndSize(input_string, input_size);
     }
 
-    char *output_string;
+    char* output_string;
     Py_ssize_t output_size;
 
     if (!unescape(input_string, input_size, &output_string, &output_size))
@@ -338,13 +364,13 @@ create_string(const char *input_string, Py_ssize_t input_size)
         return NULL;
     }
 
-    PyObject *result = PyUnicode_FromStringAndSize(output_string, output_size);
+    PyObject* result = PyUnicode_FromStringAndSize(output_string, output_size);
     PyMem_Free(output_string);
     return result;
 }
 
-static PyObject *
-create_boolean(const char *input_string, Py_ssize_t input_size)
+static PyObject*
+create_boolean(const char* input_string, Py_ssize_t input_size)
 {
     if (input_size == 4 && !memcmp(input_string, "true", 4))
     {
@@ -394,10 +420,10 @@ parse_uuid(__m256i x)
 }
 
 inline bool
-parse_uuid_compact(const char *str, uuid_t id)
+parse_uuid_compact(const char* str, uuid_t id)
 {
-    const __m256i x = _mm256_loadu_si256((__m256i *)str);
-    _mm_storeu_si128((__m128i *)id, parse_uuid(x));
+    const __m256i x = _mm256_loadu_si256((__m256i*)str);
+    _mm_storeu_si128((__m128i*)id, parse_uuid(x));
     return true;
 }
 
@@ -410,62 +436,62 @@ parse_uuid_compact(const char *str, uuid_t id)
  * @see https://github.com/crashoz/uuid_v4
  */
 inline bool
-parse_uuid_rfc_4122(const char *str, uuid_t id)
+parse_uuid_rfc_4122(const char* str, uuid_t id)
 {
     // Remove dashes and pack hexadecimal ASCII bytes in a 256-bit integer
     const __m256i dash_shuffle = _mm256_set_epi32(0x80808080, 0x0f0e0d0c, 0x0b0a0908, 0x06050403, 0x80800f0e, 0x0c0b0a09, 0x07060504, 0x03020100);
 
-    __m256i x = _mm256_loadu_si256((__m256i *)str);
+    __m256i x = _mm256_loadu_si256((__m256i*)str);
     x = _mm256_shuffle_epi8(x, dash_shuffle);
-    x = _mm256_insert_epi16(x, *(uint16_t *)(str + 16), 7);
-    x = _mm256_insert_epi32(x, *(uint32_t *)(str + 32), 7);
+    x = _mm256_insert_epi16(x, *(uint16_t*)(str + 16), 7);
+    x = _mm256_insert_epi32(x, *(uint32_t*)(str + 32), 7);
 
-    _mm_storeu_si128((__m128i *)id, parse_uuid(x));
+    _mm_storeu_si128((__m128i*)id, parse_uuid(x));
     return true;
 }
 #else
 inline bool
-parse_uuid_compact(const char *str, uuid_t id)
+parse_uuid_compact(const char* str, uuid_t id)
 {
     int n = 0;
     sscanf(str,
-           "%2hhx%2hhx%2hhx%2hhx"
-           "%2hhx%2hhx"
-           "%2hhx%2hhx"
-           "%2hhx%2hhx"
-           "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx%n",
-           &id[0], &id[1], &id[2], &id[3],
-           &id[4], &id[5],
-           &id[6], &id[7],
-           &id[8], &id[9],
-           &id[10], &id[11], &id[12], &id[13], &id[14], &id[15], &n);
+        "%2hhx%2hhx%2hhx%2hhx"
+        "%2hhx%2hhx"
+        "%2hhx%2hhx"
+        "%2hhx%2hhx"
+        "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx%n",
+        &id[0], &id[1], &id[2], &id[3],
+        &id[4], &id[5],
+        &id[6], &id[7],
+        &id[8], &id[9],
+        &id[10], &id[11], &id[12], &id[13], &id[14], &id[15], &n);
     return n == 32;
 }
 
 inline bool
-parse_uuid_rfc_4122(const char *str, uuid_t id)
+parse_uuid_rfc_4122(const char* str, uuid_t id)
 {
     int n = 0;
     sscanf(str,
-           "%2hhx%2hhx%2hhx%2hhx-"
-           "%2hhx%2hhx-"
-           "%2hhx%2hhx-"
-           "%2hhx%2hhx-"
-           "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx%n",
-           &id[0], &id[1], &id[2], &id[3],
-           &id[4], &id[5],
-           &id[6], &id[7],
-           &id[8], &id[9],
-           &id[10], &id[11], &id[12], &id[13], &id[14], &id[15], &n);
+        "%2hhx%2hhx%2hhx%2hhx-"
+        "%2hhx%2hhx-"
+        "%2hhx%2hhx-"
+        "%2hhx%2hhx-"
+        "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx%n",
+        &id[0], &id[1], &id[2], &id[3],
+        &id[4], &id[5],
+        &id[6], &id[7],
+        &id[8], &id[9],
+        &id[10], &id[11], &id[12], &id[13], &id[14], &id[15], &n);
     return n == 36;
 }
 #endif
 
-static PyObject *uuid_module;
-static PyObject *uuid_constructor;
+static PyObject* uuid_module;
+static PyObject* uuid_constructor;
 
-static PyObject *
-create_uuid(const char *input_string, Py_ssize_t input_size)
+static PyObject*
+create_uuid(const char* input_string, Py_ssize_t input_size)
 {
     uuid_t id;
 
@@ -494,8 +520,24 @@ create_uuid(const char *input_string, Py_ssize_t input_size)
     return PyObject_CallFunction(uuid_constructor, "sy#", NULL, id, (Py_ssize_t)sizeof(uuid_t));
 }
 
-static PyObject *
-create_any(char field_type, const char *input_string, Py_ssize_t input_size)
+static PyObject* ipaddress_module;
+static PyObject* ipv4addr_constructor;
+static PyObject* ipv6addr_constructor;
+
+static PyObject*
+create_ipv4addr(const char* input_string, Py_ssize_t input_size)
+{
+    return PyObject_CallFunction(ipv4addr_constructor, "s#", input_string, input_size);
+}
+
+static PyObject*
+create_ipv6addr(const char* input_string, Py_ssize_t input_size)
+{
+    return PyObject_CallFunction(ipv6addr_constructor, "s#", input_string, input_size);
+}
+
+static PyObject*
+create_any(char field_type, const char* input_string, Py_ssize_t input_size)
 {
     switch (field_type)
     {
@@ -503,6 +545,9 @@ create_any(char field_type, const char *input_string, Py_ssize_t input_size)
         return create_bytes(input_string, input_size);
 
     case 'd':
+        return create_date(input_string, input_size);
+
+    case 't':
         return create_datetime(input_string, input_size);
 
     case 'f':
@@ -520,14 +565,20 @@ create_any(char field_type, const char *input_string, Py_ssize_t input_size)
     case 'u':
         return create_uuid(input_string, input_size);
 
+    case '4':
+        return create_ipv4addr(input_string, input_size);
+
+    case '6':
+        return create_ipv6addr(input_string, input_size);
+
     default:
         PyErr_SetString(PyExc_TypeError, "expected: a field type string consisting of specifiers `b` (`bytes`), `d` (`datetime.datetime`), `f` (`float`), `i` (`int`), `s` (`str`), `u` (`uuid.UUID`) or `z` (`bool`)");
         return NULL;
     }
 }
 
-static PyObject *
-create_optional_any(char field_type, const char *input_string, Py_ssize_t input_size)
+static PyObject*
+create_optional_any(char field_type, const char* input_string, Py_ssize_t input_size)
 {
     if (input_size == 2 && input_string[0] == '\\' && input_string[1] == 'N')
     {
@@ -541,19 +592,19 @@ create_optional_any(char field_type, const char *input_string, Py_ssize_t input_
     }
 }
 
-static PyObject *
-create_optional_any_range(char field_type, const char *field_start, const char *field_end)
+static PyObject*
+create_optional_any_range(char field_type, const char* field_start, const char* field_end)
 {
     return create_optional_any(field_type, field_start, field_end - field_start);
 }
 
-static PyObject *
-tsv_parse_record(PyObject *self, PyObject *args)
+static PyObject*
+tsv_parse_record(PyObject* self, PyObject* args)
 {
-    const char *field_types;
+    const char* field_types;
     Py_ssize_t field_count;
-    PyObject *tsv_record;
-    PyObject *py_record;
+    PyObject* tsv_record;
+    PyObject* py_record;
 
     if (!PyArg_ParseTuple(args, "s#O", &field_types, &field_count, &tsv_record))
     {
@@ -576,8 +627,8 @@ tsv_parse_record(PyObject *self, PyObject *args)
     Py_ssize_t k;
     for (k = 0; k < field_count; ++k)
     {
-        PyObject *tsv_field = PyTuple_GET_ITEM(tsv_record, k);
-        char *input_string;
+        PyObject* tsv_field = PyTuple_GET_ITEM(tsv_record, k);
+        char* input_string;
         Py_ssize_t input_size;
 
         if (!PyBytes_Check(tsv_field))
@@ -593,7 +644,7 @@ tsv_parse_record(PyObject *self, PyObject *args)
             return NULL;
         }
 
-        PyObject *py_field = create_optional_any(field_types[k], input_string, input_size);
+        PyObject* py_field = create_optional_any(field_types[k], input_string, input_size);
         if (!py_field)
         {
             Py_DECREF(py_record);
@@ -606,23 +657,23 @@ tsv_parse_record(PyObject *self, PyObject *args)
     return py_record;
 }
 
-static PyObject *
-parse_line(const char *field_types, Py_ssize_t field_count, const char *line_string, Py_ssize_t line_size)
+static PyObject*
+parse_line(const char* field_types, Py_ssize_t field_count, const char* line_string, Py_ssize_t line_size)
 {
-    const char *field_start = line_string;
-    const char *field_end;
+    const char* field_start = line_string;
+    const char* field_end;
     Py_ssize_t field_index = 0;
 
-    const char *scan_start = line_string;
+    const char* scan_start = line_string;
     Py_ssize_t chars_remain = line_size;
 
-    PyObject *py_record = PyTuple_New(field_count);
+    PyObject* py_record = PyTuple_New(field_count);
 
 #if defined(__AVX2__)
     __m256i tab = _mm256_set1_epi8('\t');
     while (chars_remain >= 32)
     {
-        __m256i chunk = _mm256_loadu_si256((__m256i *)scan_start);
+        __m256i chunk = _mm256_loadu_si256((__m256i*)scan_start);
         __m256i results = _mm256_cmpeq_epi8(chunk, tab);
         unsigned int mask = _mm256_movemask_epi8(results);
 
@@ -633,7 +684,7 @@ parse_line(const char *field_types, Py_ssize_t field_count, const char *line_str
 
             field_end = scan_start + offset;
 
-            PyObject *py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
+            PyObject* py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
             if (!py_field)
             {
                 Py_DECREF(py_record);
@@ -659,7 +710,7 @@ parse_line(const char *field_types, Py_ssize_t field_count, const char *line_str
 
     while ((field_end = memchr(scan_start, '\t', chars_remain)) != NULL)
     {
-        PyObject *py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
+        PyObject* py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
         if (!py_field)
         {
             Py_DECREF(py_record);
@@ -688,7 +739,7 @@ parse_line(const char *field_types, Py_ssize_t field_count, const char *line_str
 
     field_end = line_string + line_size;
 
-    PyObject *py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
+    PyObject* py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
     if (!py_field)
     {
         Py_DECREF(py_record);
@@ -699,12 +750,12 @@ parse_line(const char *field_types, Py_ssize_t field_count, const char *line_str
     return py_record;
 }
 
-static PyObject *
-tsv_parse_line(PyObject *self, PyObject *args)
+static PyObject*
+tsv_parse_line(PyObject* self, PyObject* args)
 {
-    const char *field_types;
+    const char* field_types;
     Py_ssize_t field_count;
-    const char *line_string;
+    const char* line_string;
     Py_ssize_t line_size;
 
     if (!PyArg_ParseTuple(args, "s#y#", &field_types, &field_count, &line_string, &line_size))
@@ -715,12 +766,12 @@ tsv_parse_line(PyObject *self, PyObject *args)
     return parse_line(field_types, field_count, line_string, line_size);
 }
 
-static PyObject *
-tsv_parse_file(PyObject *self, PyObject *args)
+static PyObject*
+tsv_parse_file(PyObject* self, PyObject* args)
 {
-    const char *field_types;
+    const char* field_types;
     Py_ssize_t field_count;
-    PyObject *obj;
+    PyObject* obj;
 
     if (!PyArg_ParseTuple(args, "s#O", &field_types, &field_count, &obj))
     {
@@ -728,7 +779,7 @@ tsv_parse_file(PyObject *self, PyObject *args)
     }
 
     /* get the `read` method of the passed object */
-    PyObject *read_method;
+    PyObject* read_method;
     if ((read_method = PyObject_GetAttrString(obj, "read")) == NULL)
     {
         return NULL;
@@ -737,11 +788,11 @@ tsv_parse_file(PyObject *self, PyObject *args)
     char cache_data[8192];
     Py_ssize_t cache_size = 0;
 
-    PyObject *result = PyList_New(0);
+    PyObject* result = PyList_New(0);
     while (true)
     {
         /* call `read()` */
-        PyObject *data;
+        PyObject* data;
         if ((data = PyObject_CallFunction(read_method, "i", 8192)) == NULL)
         {
             Py_DECREF(result);
@@ -766,17 +817,17 @@ tsv_parse_file(PyObject *self, PyObject *args)
         }
 
         /* extract underlying buffer data */
-        char *buf;
+        char* buf;
         Py_ssize_t len;
         PyBytes_AsStringAndSize(data, &buf, &len);
 
         Py_ssize_t offset = 0;
-        const char *buf_beg = buf;
-        const char *buf_end;
+        const char* buf_beg = buf;
+        const char* buf_end;
         while ((buf_end = memchr(buf_beg, '\n', len - offset)) != NULL)
         {
             Py_ssize_t chunk_size = buf_end - buf_beg;
-            const char *line_string;
+            const char* line_string;
             Py_ssize_t line_size;
 
             if (cache_size > 0)
@@ -798,7 +849,7 @@ tsv_parse_file(PyObject *self, PyObject *args)
                 line_size = buf_end - buf_beg;
             }
 
-            PyObject *item = parse_line(field_types, field_count, line_string, line_size);
+            PyObject* item = parse_line(field_types, field_count, line_string, line_size);
             if (!item)
             {
                 Py_DECREF(data);
@@ -832,7 +883,7 @@ static PyMethodDef TsvParserMethods[] = {
     {"parse_record", tsv_parse_record, METH_VARARGS, "Parses a tuple of byte arrays representing a TSV record into a tuple of Python objects."},
     {"parse_line", tsv_parse_line, METH_VARARGS, "Parses a line representing a TSV record into a tuple of Python objects."},
     {"parse_file", tsv_parse_file, METH_VARARGS, "Parses a TSV file into a list consisting of tuples of Python objects."},
-    {NULL, NULL, 0, NULL}};
+    {NULL, NULL, 0, NULL} };
 
 static struct PyModuleDef TsvParserModule = {
     PyModuleDef_HEAD_INIT,
@@ -842,7 +893,7 @@ static struct PyModuleDef TsvParserModule = {
     "Parses TSV fields into a tuple of Python objects.",
     /* size of per-interpreter state of the module, or -1 if the module keeps state in global variables. */
     -1,
-    TsvParserMethods};
+    TsvParserMethods };
 
 PyMODINIT_FUNC
 PyInit_parser(void)
@@ -851,6 +902,11 @@ PyInit_parser(void)
 #if defined(Py_LIMITED_API)
     datetime_module = PyImport_ImportModule("datetime");
     if (!datetime_module)
+    {
+        return NULL;
+    }
+    date_constructor = PyObject_GetAttrString(datetime_module, "date");
+    if (!date_constructor)
     {
         return NULL;
     }
@@ -871,6 +927,23 @@ PyInit_parser(void)
     }
     uuid_constructor = PyObject_GetAttrString(uuid_module, "UUID");
     if (!uuid_constructor)
+    {
+        return NULL;
+    }
+
+    /* import module ipaddress */
+    ipaddress_module = PyImport_ImportModule("ipaddress");
+    if (!ipaddress_module)
+    {
+        return NULL;
+    }
+    ipv4addr_constructor = PyObject_GetAttrString(ipaddress_module, "IPv4Address");
+    if (!ipv4addr_constructor)
+    {
+        return NULL;
+    }
+    ipv6addr_constructor = PyObject_GetAttrString(ipaddress_module, "IPv6Address");
+    if (!ipv6addr_constructor)
     {
         return NULL;
     }
