@@ -1,8 +1,10 @@
 import datetime
+import decimal
 import enum
 import ipaddress
+import json
 import uuid
-from typing import Any, BinaryIO, List, Tuple
+from typing import Any, BinaryIO, Iterable, List, Tuple
 
 from . import parser
 
@@ -73,8 +75,12 @@ def types_to_format_str(fields: Tuple[type, ...]) -> str:
 def generate_value(val: Any) -> bytes:
     "Returns the TSV representation of a Python object."
 
-    if isinstance(val, bool):
+    if val is None:
+        return b"\\N"
+    elif isinstance(val, bool):
         return b"true" if val else b"false"
+    elif isinstance(val, bytes):
+        return escape(val)
     elif isinstance(val, (int, float, uuid.UUID)):
         return str(val).encode("ascii")
     elif isinstance(val, str):
@@ -88,14 +94,22 @@ def generate_value(val: Any) -> bytes:
         )
     elif isinstance(val, datetime.date):
         return val.isoformat().encode("ascii")
-    elif isinstance(val, bytes):
-        return escape(val)
+    elif isinstance(val, decimal.Decimal):
+        return str(val).encode("ascii")
     elif isinstance(val, enum.Enum):
         return generate_value(val.value)
     elif isinstance(val, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
         return val.compressed.encode("ascii")
+    elif isinstance(val, (dict, list)):  # JSON
+        return escape(
+            json.dumps(
+                val, ensure_ascii=False, check_circular=False, separators=(",", ":")
+            ).encode("utf-8")
+        )
     else:
-        raise TypeError(f"conversion for value `{val}` is not supported")
+        raise TypeError(
+            f"conversion for value `{val}` of type `{type(val)}` is not supported"
+        )
 
 
 class Generator:
@@ -106,6 +120,11 @@ class Generator:
 
     def generate_line(self, record: Tuple[Any, ...]) -> bytes:
         return b"\t".join(generate_value(field) for field in record)
+
+    def generate_file(self, file: BinaryIO, items: Iterable[Tuple[Any, ...]]) -> None:
+        for item in items:
+            file.write(self.generate_line(item))
+            file.write(b"\n")
 
 
 class Parser:
