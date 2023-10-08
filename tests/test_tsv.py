@@ -1,6 +1,7 @@
 import time
 import unittest
 from datetime import date, datetime
+from decimal import Decimal
 from io import BytesIO
 from ipaddress import IPv4Address, IPv6Address
 from uuid import UUID
@@ -20,6 +21,7 @@ class TestParseRecord(unittest.TestCase):
             b"multi-line\\r\\nstring",
             b"f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
             b"true",
+            b"3.14159265358979323846264338327950288419716939937510",
             b"192.0.2.0",
             b"2001:DB8:0:0:8:800:200C:417A",
         )
@@ -32,33 +34,16 @@ class TestParseRecord(unittest.TestCase):
             "multi-line\r\nstring",
             UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
             True,
+            Decimal("3.14159265358979323846264338327950288419716939937510"),
             IPv4Address("192.0.2.0"),
             IPv6Address("2001:DB8:0:0:8:800:200C:417A"),
         )
-        self.assertEqual(parse_record("bdtfisuz46", tsv_record), py_record)
+        self.assertEqual(parse_record("bdtfisuz.46", tsv_record), py_record)
 
     def test_none(self) -> None:
-        tsv_record = (
-            b"\N",
-            b"\N",
-            b"\N",
-            b"\N",
-            b"\N",
-            b"\N",
-            b"\N",
-            b"\N",
-        )
-        py_record = (
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        self.assertEqual(parse_record("bdtfisuz", tsv_record), py_record)
+        tsv_record = tuple(b"\N" for _ in range(11))
+        py_record = tuple(None for _ in range(11))
+        self.assertEqual(parse_record("bdtfisuz.46", tsv_record), py_record)
 
     def test_integer(self) -> None:
         tsv_record = (
@@ -99,6 +84,9 @@ class TestParseLine(unittest.TestCase):
                 b"multi-line\\r\\nstring",
                 b"f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
                 b"true",
+                b"3.14159265358979323846264338327950288419716939937510",
+                b"192.0.2.0",
+                b"2001:DB8:0:0:8:800:200C:417A",
             ]
         )
         py_record = (
@@ -110,33 +98,16 @@ class TestParseLine(unittest.TestCase):
             "multi-line\r\nstring",
             UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
             True,
+            Decimal("3.14159265358979323846264338327950288419716939937510"),
+            IPv4Address("192.0.2.0"),
+            IPv6Address("2001:DB8:0:0:8:800:200C:417A"),
         )
-        self.assertEqual(parse_line("bdtfisuz", tsv_record), py_record)
+        self.assertEqual(parse_line("bdtfisuz.46", tsv_record), py_record)
 
     def test_none(self) -> None:
-        tsv_record = b"\t".join(
-            [
-                b"\N",
-                b"\N",
-                b"\N",
-                b"\N",
-                b"\N",
-                b"\N",
-                b"\N",
-                b"\N",
-            ]
-        )
-        py_record = (
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-        self.assertEqual(parse_line("bdtfisuz", tsv_record), py_record)
+        tsv_record = b"\t".join(b"\N" for _ in range(11))
+        py_record = tuple(None for _ in range(11))
+        self.assertEqual(parse_line("bdtfisuz.46", tsv_record), py_record)
 
     def test_field_count(self) -> None:
         tsv_record = b"0"

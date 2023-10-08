@@ -4,7 +4,7 @@ import enum
 import ipaddress
 import json
 import uuid
-from typing import Any, BinaryIO, Iterable, List, Tuple
+from typing import Any, BinaryIO, Dict, Iterable, List, Tuple
 
 from . import parser
 
@@ -50,18 +50,22 @@ def type_to_format_char(typ: type) -> str:
         return "f"
     elif typ is str:
         return "s"
+    elif typ is bytes:
+        return "b"
     elif typ is datetime.datetime:
         return "t"
     elif typ is datetime.date:
         return "d"
+    elif typ is decimal.Decimal:
+        return "."
     elif typ is uuid.UUID:
         return "u"
-    elif typ is bytes:
-        return "b"
     elif typ is ipaddress.IPv4Address:
         return "4"
     elif typ is ipaddress.IPv6Address:
         return "6"
+    elif typ is list or typ is dict:  # JSON
+        return "s"  # read as string
     else:
         raise TypeError(f"conversion for type `{typ}` is not supported")
 
@@ -133,6 +137,12 @@ class Parser:
     _format: str
 
     def __init__(self, fields: Tuple[type, ...]) -> None:
+        """
+        Creates a new parser.
+
+        :param fields: Column types, in order of occurrence.
+        """
+
         self._format = types_to_format_str(fields)
 
     def parse_record(self, record: Tuple[bytes, ...]) -> Tuple[Any, ...]:
@@ -174,3 +184,22 @@ class Parser:
         """
 
         return parser.parse_file(self._format, file)
+
+
+class AutoDetectParser(Parser):
+    "Parses TSV data into Python tuples auto-detecting types based on a header."
+
+    columns: Tuple[str, ...]
+
+    def __init__(self, names_to_types: Dict[str, type], header: bytes) -> None:
+        """
+        Creates a new parser.
+
+        :param names_to_types: Associates column names with column types.
+        :param header: The table header, usually the first line in a file.
+        """
+
+        self.columns = tuple(col.decode("utf-8") for col in header.split(b"\t"))
+        self._format = types_to_format_str(
+            tuple(names_to_types[name] for name in self.columns)
+        )

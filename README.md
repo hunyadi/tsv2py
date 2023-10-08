@@ -59,6 +59,7 @@ The parser understands the following Python types:
 * `int`. Arbitrary-length integers are allowed.
 * `str`. TSV escape sequences are reversed before the data is passed to Python as a `str`. NUL bytes are not allowed.
 * `uuid.UUID`. The input has to comply with RFC 4122, or be a string of 32 hexadecimal digits.
+* `decimal.Decimal`. Interpreted as arbitrary precision decimal numbers.
 * `ipaddress.IPv4Address`.
 * `ipaddress.IPv6Address`.
 

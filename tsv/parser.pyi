@@ -14,6 +14,7 @@ def parse_record(field_types: str, record: Tuple[bytes, ...]) -> Tuple[Any, ...]
         * `s` for `str`
         * `z` for `bool`
         * `u` for `UUID`
+        * `.` for `Decimal`
         * `4` for `IPv4Address`
         * `6` for `IPv6Address`
 

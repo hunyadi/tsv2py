@@ -387,6 +387,15 @@ create_boolean(const char* input_string, Py_ssize_t input_size)
     }
 }
 
+static PyObject* decimal_module;
+static PyObject* decimal_constructor;
+
+static PyObject*
+create_decimal(const char* input_string, Py_ssize_t input_size)
+{
+    return PyObject_CallFunction(decimal_constructor, "s#", input_string, input_size);
+}
+
 typedef unsigned char uuid_t[16];
 
 #if defined(__AVX2__)
@@ -561,6 +570,9 @@ create_any(char field_type, const char* input_string, Py_ssize_t input_size)
 
     case 'z':
         return create_boolean(input_string, input_size);
+
+    case '.':
+        return create_decimal(input_string, input_size);
 
     case 'u':
         return create_uuid(input_string, input_size);
@@ -918,6 +930,18 @@ PyInit_parser(void)
 #else
     PyDateTime_IMPORT;
 #endif
+
+    /* import module decimal */
+    decimal_module = PyImport_ImportModule("decimal");
+    if (!decimal_module)
+    {
+        return NULL;
+    }
+    decimal_constructor = PyObject_GetAttrString(decimal_module, "Decimal");
+    if (!decimal_constructor)
+    {
+        return NULL;
+    }
 
     /* import module uuid */
     uuid_module = PyImport_ImportModule("uuid");
