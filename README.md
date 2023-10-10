@@ -62,6 +62,9 @@ The parser understands the following Python types:
 * `decimal.Decimal`. Interpreted as arbitrary precision decimal numbers.
 * `ipaddress.IPv4Address`.
 * `ipaddress.IPv6Address`.
+* `list` and `dict`, which are understood as JSON, and invoke `json.loads` to parse a serialized JSON string.
+
+The backslash character `\` is both a TSV and a JSON escape sequence initiator. When JSON data is written to TSV, several backslash characters may be needed, e.g. `\\n` in a quoted JSON string translates to a single newline character. First, `\\` in `\\n` is understood as an escape sequence by the TSV parser to produce a single `\` character followed by an `n` character, and in turn `\n` is understood as a single newline embedded in a JSON string by the JSON parser. Specifically, you need four consecutive backslash characters in TSV to represent a single backslash in a JSON quoted string.
 
 Internally, the implementation uses AVX2 instructions to
 

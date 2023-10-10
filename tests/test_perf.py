@@ -1,7 +1,8 @@
 import random
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from ipaddress import IPv4Address, IPv6Address
+from json import JSONDecoder
 from timeit import timeit
 from typing import Any, Callable, Tuple
 from uuid import UUID
@@ -16,6 +17,10 @@ def parse_datetime(s: bytes) -> datetime:
         .astimezone(timezone.utc)
         .replace(tzinfo=None)
     )
+
+
+def parse_date(s: bytes) -> date:
+    return date.fromisoformat(s.decode("ascii"))
 
 
 def parse_str(s: bytes) -> str:
@@ -34,6 +39,13 @@ def parse_ipv6addr(s: bytes) -> IPv6Address:
     return IPv6Address(s.decode("ascii"))
 
 
+DECODER = JSONDecoder()
+
+
+def parse_json(s: bytes) -> Any:
+    return DECODER.decode(s.decode("utf-8"))
+
+
 def type_to_converter(typ: type) -> Callable[[bytes], Any]:
     if typ is bool:
         return bool
@@ -45,6 +57,8 @@ def type_to_converter(typ: type) -> Callable[[bytes], Any]:
         return parse_str
     elif typ is datetime:
         return parse_datetime
+    elif typ is date:
+        return parse_date
     elif typ is UUID:
         return parse_uuid
     elif typ is bytes:
@@ -53,6 +67,8 @@ def type_to_converter(typ: type) -> Callable[[bytes], Any]:
         return parse_ipv4addr
     elif typ is IPv6Address:
         return parse_ipv6addr
+    elif typ is list or typ is dict:
+        return parse_json
     else:
         raise TypeError(f"conversion for type `{typ}` is not supported")
 
@@ -118,6 +134,8 @@ class TestPerformance(unittest.TestCase):
         bool,
         IPv4Address,
         IPv6Address,
+        list,
+        dict,
     )
     tsv_record: tuple = (
         "árvíztűrő tükörfúrógép".encode("utf-8"),
@@ -130,6 +148,8 @@ class TestPerformance(unittest.TestCase):
         b"true",
         b"192.0.2.0",
         b"2001:DB8:0:0:8:800:200C:417A",
+        b"[1,2,3,4,5,6,7,8,9]",
+        b'{"string": "value", "integer": 82, "float": 23.45}',
     )
 
     tester: Tester

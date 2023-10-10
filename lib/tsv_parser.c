@@ -545,6 +545,32 @@ create_ipv6addr(const char* input_string, Py_ssize_t input_size)
     return PyObject_CallFunction(ipv6addr_constructor, "s#", input_string, input_size);
 }
 
+static PyObject* json_module;
+static PyObject* json_decoder_object;
+static PyObject* json_decode_function;
+
+static PyObject*
+create_json(const char* input_string, Py_ssize_t input_size)
+{
+    if (!is_escaped(input_string, input_size))
+    {
+        return PyObject_CallFunction(json_decode_function, "s#", input_string, input_size);
+    }
+
+    char* output_string;
+    Py_ssize_t output_size;
+
+    if (!unescape(input_string, input_size, &output_string, &output_size))
+    {
+        PyErr_SetString(PyExc_ValueError, "invalid character escape sequence, only \\0, \\b, \\f, \\n, \\r, \\t and \\v are allowed");
+        return NULL;
+    }
+
+    PyObject* result = PyObject_CallFunction(json_decode_function, "s#", output_string, output_size);
+    PyMem_Free(output_string);
+    return result;
+}
+
 static PyObject*
 create_any(char field_type, const char* input_string, Py_ssize_t input_size)
 {
@@ -583,8 +609,24 @@ create_any(char field_type, const char* input_string, Py_ssize_t input_size)
     case '6':
         return create_ipv6addr(input_string, input_size);
 
+    case 'j':
+        return create_json(input_string, input_size);
+
     default:
-        PyErr_SetString(PyExc_TypeError, "expected: a field type string consisting of specifiers `b` (`bytes`), `d` (`datetime.datetime`), `f` (`float`), `i` (`int`), `s` (`str`), `u` (`uuid.UUID`) or `z` (`bool`)");
+        PyErr_SetString(PyExc_TypeError, "expected: a field type string consisting of specifiers "
+            "`b` (`bytes`), "
+            "`d` (`datetime.date`), "
+            "`t` (`datetime.datetime`), "
+            "`f` (`float`), "
+            "`i` (`int`), "
+            "`s` (`str`), "
+            "`z` (`bool`), "
+            "`.` (`decimal.Decimal`), "
+            "`u` (`uuid.UUID`), "
+            "`4` (`ipaddress.IPv6Address`), "
+            "`6` (`ipaddress.IPv6Address`) or "
+            "`j` (serialized JSON)"
+        );
         return NULL;
     }
 }
@@ -931,7 +973,7 @@ PyInit_parser(void)
     PyDateTime_IMPORT;
 #endif
 
-    /* import module decimal */
+    /* import module `decimal` */
     decimal_module = PyImport_ImportModule("decimal");
     if (!decimal_module)
     {
@@ -943,7 +985,7 @@ PyInit_parser(void)
         return NULL;
     }
 
-    /* import module uuid */
+    /* import module `uuid` */
     uuid_module = PyImport_ImportModule("uuid");
     if (!uuid_module)
     {
@@ -955,7 +997,7 @@ PyInit_parser(void)
         return NULL;
     }
 
-    /* import module ipaddress */
+    /* import module `ipaddress` */
     ipaddress_module = PyImport_ImportModule("ipaddress");
     if (!ipaddress_module)
     {
@@ -971,6 +1013,25 @@ PyInit_parser(void)
     {
         return NULL;
     }
+
+    /* import module `json` */
+    json_module = PyImport_ImportModule("json");
+    if (!json_module)
+    {
+        return NULL;
+    }
+    PyObject* json_decoder_constructor = PyObject_GetAttrString(json_module, "JSONDecoder");
+    if (!json_decoder_constructor)
+    {
+        return NULL;
+    }
+    json_decoder_object = PyObject_CallFunction(json_decoder_constructor, NULL);
+    Py_DECREF(json_decoder_constructor);
+    if (!json_decoder_object)
+    {
+        return NULL;
+    }
+    json_decode_function = PyObject_GetAttrString(json_decoder_object, "decode");
 
     return PyModule_Create(&TsvParserModule);
 }

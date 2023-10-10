@@ -1,4 +1,5 @@
 import time
+import typing
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
@@ -24,6 +25,8 @@ class TestParseRecord(unittest.TestCase):
             b"3.14159265358979323846264338327950288419716939937510",
             b"192.0.2.0",
             b"2001:DB8:0:0:8:800:200C:417A",
+            b'["one","two","three"]',
+            b'{"string": "value", "number": 87}',
         )
         py_record = (
             "árvíztűrő tükörfúrógép".encode("utf-8"),
@@ -37,13 +40,15 @@ class TestParseRecord(unittest.TestCase):
             Decimal("3.14159265358979323846264338327950288419716939937510"),
             IPv4Address("192.0.2.0"),
             IPv6Address("2001:DB8:0:0:8:800:200C:417A"),
+            ["one", "two", "three"],
+            {"string": "value", "number": 87},
         )
-        self.assertEqual(parse_record("bdtfisuz.46", tsv_record), py_record)
+        self.assertEqual(parse_record("bdtfisuz.46jj", tsv_record), py_record)
 
     def test_none(self) -> None:
-        tsv_record = tuple(b"\N" for _ in range(11))
-        py_record = tuple(None for _ in range(11))
-        self.assertEqual(parse_record("bdtfisuz.46", tsv_record), py_record)
+        tsv_record = tuple(b"\N" for _ in range(12))
+        py_record = tuple(None for _ in range(12))
+        self.assertEqual(parse_record("bdtfisuz.46j", tsv_record), py_record)
 
     def test_integer(self) -> None:
         tsv_record = (
@@ -70,6 +75,27 @@ class TestParseRecord(unittest.TestCase):
             UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
         )
         self.assertEqual(parse_record("uu", tsv_record), py_record)
+
+    def test_json(self) -> None:
+        bs = "\\"  # a single backslash character
+        tsv_record = (
+            b"[]",
+            b"{}",
+            b"[0]",
+            b"[1,2]",
+            b'["string"]',
+            # both TSV unescape and JSON parser have `\` as the escape character
+            f'["backslash: {bs}{bs}{bs}{bs}", "newline: {bs}{bs}n"]'.encode("utf-8"),
+        )
+        py_record: typing.Tuple[list, dict, list, list, list, list] = (
+            [],
+            {},
+            [0],
+            [1, 2],
+            ["string"],
+            ["backslash: \\", "newline: \n"],
+        )
+        self.assertEqual(parse_record("jjjjjj", tsv_record), py_record)
 
 
 class TestParseLine(unittest.TestCase):

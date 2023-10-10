@@ -64,8 +64,8 @@ def type_to_format_char(typ: type) -> str:
         return "4"
     elif typ is ipaddress.IPv6Address:
         return "6"
-    elif typ is list or typ is dict:  # JSON
-        return "s"  # read as string
+    elif typ is list or typ is dict:  # serialized JSON
+        return "j"
     else:
         raise TypeError(f"conversion for type `{typ}` is not supported")
 
@@ -104,7 +104,7 @@ def generate_value(val: Any) -> bytes:
         return generate_value(val.value)
     elif isinstance(val, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
         return val.compressed.encode("ascii")
-    elif isinstance(val, (dict, list)):  # JSON
+    elif isinstance(val, (dict, list)):  # serialized JSON
         return escape(
             json.dumps(
                 val, ensure_ascii=False, check_circular=False, separators=(",", ":")
