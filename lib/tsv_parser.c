@@ -532,17 +532,27 @@ create_uuid(const char* input_string, Py_ssize_t input_size)
 static PyObject* ipaddress_module;
 static PyObject* ipv4addr_constructor;
 static PyObject* ipv6addr_constructor;
+static PyObject* ipaddr_constructor;
 
+/** Parses an IPv4 address string into an IPv4 address object. */
 static PyObject*
 create_ipv4addr(const char* input_string, Py_ssize_t input_size)
 {
     return PyObject_CallFunction(ipv4addr_constructor, "s#", input_string, input_size);
 }
 
+/** Parses an IPv6 address string into an IPv6 address object. */
 static PyObject*
 create_ipv6addr(const char* input_string, Py_ssize_t input_size)
 {
     return PyObject_CallFunction(ipv6addr_constructor, "s#", input_string, input_size);
+}
+
+/** Parses an IPv4 or IPv6 address string into an IPv4 or IPv6 address object. */
+static PyObject*
+create_ipaddr(const char* input_string, Py_ssize_t input_size)
+{
+    return PyObject_CallFunction(ipaddr_constructor, "s#", input_string, input_size);
 }
 
 static PyObject* json_module;
@@ -608,6 +618,9 @@ create_any(char field_type, const char* input_string, Py_ssize_t input_size)
 
     case '6':
         return create_ipv6addr(input_string, input_size);
+
+    case 'n':
+        return create_ipaddr(input_string, input_size);
 
     case 'j':
         return create_json(input_string, input_size);
@@ -1010,6 +1023,11 @@ PyInit_parser(void)
     }
     ipv6addr_constructor = PyObject_GetAttrString(ipaddress_module, "IPv6Address");
     if (!ipv6addr_constructor)
+    {
+        return NULL;
+    }
+    ipaddr_constructor = PyObject_GetAttrString(ipaddress_module, "ip_address");
+    if (!ipaddr_constructor)
     {
         return NULL;
     }

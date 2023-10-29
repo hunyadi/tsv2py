@@ -17,6 +17,7 @@ def parse_record(field_types: str, record: Tuple[bytes, ...]) -> Tuple[Any, ...]
         * `.` for `Decimal`
         * `4` for `IPv4Address`
         * `6` for `IPv6Address`
+        * 'n' for network address (either IPv4 or IPv6)
         * `j` for serialized JSON
 
     :param field_types: Identifies the expected type of each field.

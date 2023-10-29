@@ -3,8 +3,11 @@ import decimal
 import enum
 import ipaddress
 import json
+import sys
+import types
+import typing
 import uuid
-from typing import Any, BinaryIO, Dict, Iterable, List, Tuple
+from typing import Any, BinaryIO, Dict, Iterable, List, Tuple, Union
 
 from . import parser
 
@@ -39,6 +42,21 @@ def unescape(s: bytes) -> bytes:
     )
 
 
+if sys.version_info >= (3, 10):
+
+    def is_union_like(typ: object) -> bool:
+        "True if type is a union such as `Union[T1, T2, ...]` or a union type `T1 | T2`."
+
+        return typing.get_origin(typ) is Union or isinstance(typ, types.UnionType)
+
+else:
+
+    def is_union_like(typ: object) -> bool:
+        "True if type is a union such as `Union[T1, T2, ...]` or a union type `T1 | T2`."
+
+        return typing.get_origin(typ) is Union
+
+
 def type_to_format_char(typ: type) -> str:
     "Returns the type format character for a Python type."
 
@@ -66,8 +84,17 @@ def type_to_format_char(typ: type) -> str:
         return "6"
     elif typ is list or typ is dict:  # serialized JSON
         return "j"
-    else:
-        raise TypeError(f"conversion for type `{typ}` is not supported")
+
+    if is_union_like(typ):
+        args = typing.get_args(typ)
+        if (
+            len(args) == 2
+            and ipaddress.IPv4Address in args
+            and ipaddress.IPv6Address in args
+        ):
+            return "n"
+
+    raise TypeError(f"conversion for type `{typ}` is not supported")
 
 
 def types_to_format_str(fields: Tuple[type, ...]) -> str:
