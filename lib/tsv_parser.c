@@ -144,6 +144,7 @@ unescape(const char* source, Py_ssize_t source_len, char** target, Py_ssize_t* t
 #if defined(Py_LIMITED_API)
 static PyObject* datetime_module;
 static PyObject* date_constructor;
+static PyObject* time_constructor;
 static PyObject* datetime_constructor;
 #endif
 
@@ -170,6 +171,31 @@ create_date(const char* input_string, Py_ssize_t input_size)
     int month = atoi(input_string + 5);
     int day = atoi(input_string + 8);
     return python_date(year, month, day);
+}
+
+inline PyObject*
+python_time(int hour, int minute, int second)
+{
+#if defined(Py_LIMITED_API)
+    return PyObject_CallFunction(time_constructor, "iii", hour, minute, second);
+#else
+    return PyTime_FromTime(hour, minute, second, 0);
+#endif
+}
+
+static PyObject*
+create_time(const char* input_string, Py_ssize_t input_size)
+{
+    if (input_size != 9 || input_string[2] != ':' || input_string[5] != ':' || input_string[8] != 'Z')
+    {
+        PyErr_Format(PyExc_ValueError, "expected: a date field of the format `hh:mm:ssZ`; got: %.32s (len = %zd)", input_string, input_size);
+        return NULL;
+    }
+
+    int hour = atoi(input_string);
+    int minute = atoi(input_string + 3);
+    int second = atoi(input_string + 6);
+    return python_time(hour, minute, second);
 }
 
 inline PyObject*
@@ -234,7 +260,7 @@ create_datetime(const char* input_string, Py_ssize_t input_size)
 
     if (!is_valid_date_hour_minute(characters) || input_string[16] != ':' || input_string[19] != 'Z')
     {
-        PyErr_SetString(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDTHH:MM:SSZ` or `YYYY-MM-DD HH:MM:SSZ`");
+        PyErr_SetString(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ` or `YYYY-MM-DD hh:mm:ssZ`");
         return NULL;
     }
 
@@ -593,6 +619,9 @@ create_any(char field_type, const char* input_string, Py_ssize_t input_size)
         return create_date(input_string, input_size);
 
     case 't':
+        return create_time(input_string, input_size);
+
+    case 'T':
         return create_datetime(input_string, input_size);
 
     case 'f':
@@ -629,7 +658,8 @@ create_any(char field_type, const char* input_string, Py_ssize_t input_size)
         PyErr_SetString(PyExc_TypeError, "expected: a field type string consisting of specifiers "
             "`b` (`bytes`), "
             "`d` (`datetime.date`), "
-            "`t` (`datetime.datetime`), "
+            "`t` (`datetime.time`), "
+            "`T` (`datetime.datetime`), "
             "`f` (`float`), "
             "`i` (`int`), "
             "`s` (`str`), "
@@ -638,6 +668,7 @@ create_any(char field_type, const char* input_string, Py_ssize_t input_size)
             "`u` (`uuid.UUID`), "
             "`4` (`ipaddress.IPv6Address`), "
             "`6` (`ipaddress.IPv6Address`) or "
+            "`n` (IPv4 or IPv6 address) or "
             "`j` (serialized JSON)"
         );
         return NULL;
@@ -974,6 +1005,11 @@ PyInit_parser(void)
     }
     date_constructor = PyObject_GetAttrString(datetime_module, "date");
     if (!date_constructor)
+    {
+        return NULL;
+    }
+    time_constructor = PyObject_GetAttrString(datetime_module, "time");
+    if (!time_constructor)
     {
         return NULL;
     }

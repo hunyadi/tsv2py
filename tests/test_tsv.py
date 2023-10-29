@@ -1,7 +1,7 @@
+import datetime
 import time
 import typing
 import unittest
-from datetime import date, datetime
 from decimal import Decimal
 from io import BytesIO
 from ipaddress import IPv4Address, IPv6Address
@@ -16,6 +16,7 @@ class TestParseRecord(unittest.TestCase):
         tsv_record = (
             "árvíztűrő tükörfúrógép".encode("utf-8"),
             b"1984-01-01",
+            b"23:59:59Z",
             b"1989-10-23T23:59:59Z",
             b"0.5",
             b"-56",
@@ -30,8 +31,9 @@ class TestParseRecord(unittest.TestCase):
         )
         py_record = (
             "árvíztűrő tükörfúrógép".encode("utf-8"),
-            date(1984, 1, 1),
-            datetime(1989, 10, 23, 23, 59, 59),
+            datetime.date(1984, 1, 1),
+            datetime.time(23, 59, 59),
+            datetime.datetime(1989, 10, 23, 23, 59, 59),
             0.5,
             -56,
             "multi-line\r\nstring",
@@ -43,12 +45,19 @@ class TestParseRecord(unittest.TestCase):
             ["one", "two", "three"],
             {"string": "value", "number": 87},
         )
-        self.assertEqual(parse_record("bdtfisuz.46jj", tsv_record), py_record)
+        signature = "".join(
+            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j", "j"]
+        )
+        self.assertEqual(parse_record(signature, tsv_record), py_record)
 
     def test_none(self) -> None:
-        tsv_record = tuple(b"\N" for _ in range(12))
-        py_record = tuple(None for _ in range(12))
-        self.assertEqual(parse_record("bdtfisuz.46j", tsv_record), py_record)
+        tsv_record = tuple(b"\N" for _ in range(13))
+        py_record = tuple(None for _ in range(13))
+
+        signature = "".join(
+            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j"]
+        )
+        self.assertEqual(parse_record(signature, tsv_record), py_record)
 
     def test_integer(self) -> None:
         tsv_record = (
@@ -104,6 +113,7 @@ class TestParseLine(unittest.TestCase):
             [
                 "árvíztűrő tükörfúrógép".encode("utf-8"),
                 b"1984-01-01",
+                b"23:59:59Z",
                 b"1989-10-23T23:59:59Z",
                 b"0.5",
                 b"-56",
@@ -113,12 +123,14 @@ class TestParseLine(unittest.TestCase):
                 b"3.14159265358979323846264338327950288419716939937510",
                 b"192.0.2.0",
                 b"2001:DB8:0:0:8:800:200C:417A",
+                b'{"string":"value","number":87}',
             ]
         )
         py_record = (
             "árvíztűrő tükörfúrógép".encode("utf-8"),
-            date(1984, 1, 1),
-            datetime(1989, 10, 23, 23, 59, 59),
+            datetime.date(1984, 1, 1),
+            datetime.time(23, 59, 59),
+            datetime.datetime(1989, 10, 23, 23, 59, 59),
             0.5,
             -56,
             "multi-line\r\nstring",
@@ -127,13 +139,20 @@ class TestParseLine(unittest.TestCase):
             Decimal("3.14159265358979323846264338327950288419716939937510"),
             IPv4Address("192.0.2.0"),
             IPv6Address("2001:DB8:0:0:8:800:200C:417A"),
+            {"string": "value", "number": 87},
         )
-        self.assertEqual(parse_line("bdtfisuz.46", tsv_record), py_record)
+        signature = "".join(
+            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j"]
+        )
+        self.assertEqual(parse_line(signature, tsv_record), py_record)
 
     def test_none(self) -> None:
-        tsv_record = b"\t".join(b"\N" for _ in range(11))
-        py_record = tuple(None for _ in range(11))
-        self.assertEqual(parse_line("bdtfisuz.46", tsv_record), py_record)
+        tsv_record = b"\t".join(b"\N" for _ in range(13))
+        py_record = tuple(None for _ in range(13))
+        signature = "".join(
+            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j"]
+        )
+        self.assertEqual(parse_line(signature, tsv_record), py_record)
 
     def test_field_count(self) -> None:
         tsv_record = b"0"
@@ -208,8 +227,8 @@ class TestParseFile(unittest.TestCase):
         parser = Parser(
             (
                 bytes,
-                date,
-                datetime,
+                datetime.date,
+                datetime.datetime,
                 float,
                 int,
                 str,
@@ -230,8 +249,8 @@ class TestParseFile(unittest.TestCase):
 
         py_record = (
             "árvíztűrő tükörfúrógép".encode("utf-8"),
-            date(1984, 1, 1),
-            datetime(1989, 10, 23, 23, 59, 59),
+            datetime.date(1984, 1, 1),
+            datetime.datetime(1989, 10, 23, 23, 59, 59),
             0.5,
             -56,
             "multi-line\r\nstring",
@@ -246,8 +265,8 @@ class TestParseFile(unittest.TestCase):
         parser = Parser(
             (
                 bytes,
-                date,
-                datetime,
+                datetime.date,
+                datetime.datetime,
                 float,
                 int,
                 str,

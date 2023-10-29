@@ -8,7 +8,8 @@ def parse_record(field_types: str, record: Tuple[bytes, ...]) -> Tuple[Any, ...]
     The following type specification characters are supported:
         * `b` for `bytes` (pass-through mode)
         * `d` for `date`
-        * `t` for `datetime` (naive, assumed as if in UTC)
+        * `t` for `time` (naive, assumed as if in UTC)
+        * `T` for `datetime` (naive, assumed as if in UTC)
         * `f` for `float`
         * `i` for `int`
         * `s` for `str`

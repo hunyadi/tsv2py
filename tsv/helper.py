@@ -71,9 +71,11 @@ def type_to_format_char(typ: type) -> str:
     elif typ is bytes:
         return "b"
     elif typ is datetime.datetime:
-        return "t"
+        return "T"
     elif typ is datetime.date:
         return "d"
+    elif typ is datetime.time:
+        return "t"
     elif typ is decimal.Decimal:
         return "."
     elif typ is uuid.UUID:
