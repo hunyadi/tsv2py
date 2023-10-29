@@ -1,4 +1,5 @@
 abi3audit
+build
 cibuildwheel
 setuptools
 wheel
