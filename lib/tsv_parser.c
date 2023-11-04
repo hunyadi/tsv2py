@@ -2,6 +2,14 @@
 #include <Python.h>
 #include <datetime.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
+#if defined(_WIN32) || defined(_WIN64)
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#endif
 
 #if defined(__AVX2__)
 #include <immintrin.h>
@@ -148,6 +156,12 @@ static PyObject* time_constructor;
 static PyObject* datetime_constructor;
 #endif
 
+/**
+ * Scale multipliers from micro-seconds to deci-seconds.
+ * Trailing zeros are included to handle special cases with no fractional digits.
+ */
+static int fractional_second_scales[] = { 1, 10, 100, 1000, 10000, 100000, 0, 0 };
+
 inline PyObject*
 python_date(int year, int month, int day)
 {
@@ -156,6 +170,30 @@ python_date(int year, int month, int day)
 #else
     return PyDate_FromDate(year, month, day);
 #endif
+}
+
+typedef struct {
+    int year;
+    int month;
+    int day;
+} date_struct;
+
+inline bool
+parse_date(const char* input_string, date_struct* ds)
+{
+    char* ym_sep_ptr;
+    ds->year = strtol(input_string, &ym_sep_ptr, 10);
+    char* md_sep_ptr;
+    ds->month = strtol(input_string + 5, &md_sep_ptr, 10);
+    char* end_ptr;
+    ds->day = strtol(input_string + 8, &end_ptr, 10);
+
+    if (ym_sep_ptr != input_string + 4 || md_sep_ptr != input_string + 7 || end_ptr != input_string + 10)
+    {
+        return false;
+    }
+
+    return true;
 }
 
 static PyObject*
@@ -167,50 +205,120 @@ create_date(const char* input_string, Py_ssize_t input_size)
         return NULL;
     }
 
-    int year = atoi(input_string);
-    int month = atoi(input_string + 5);
-    int day = atoi(input_string + 8);
-    return python_date(year, month, day);
+    date_struct ds;
+    if (!parse_date(input_string, &ds))
+    {
+        PyErr_Format(PyExc_ValueError, "expected: a date field of the format `YYYY-MM-DD`; got: %s", input_string);
+        return NULL;
+    }
+
+    return python_date(ds.year, ds.month, ds.day);
 }
 
 inline PyObject*
-python_time(int hour, int minute, int second)
+python_time(int hour, int minute, int second, int microsecond)
 {
 #if defined(Py_LIMITED_API)
-    return PyObject_CallFunction(time_constructor, "iii", hour, minute, second);
+    return PyObject_CallFunction(time_constructor, "iiii", hour, minute, second, microsecond);
 #else
-    return PyTime_FromTime(hour, minute, second, 0);
+    return PyTime_FromTime(hour, minute, second, microsecond);
 #endif
+}
+
+inline bool
+is_valid_time(const char* input_string, Py_ssize_t input_size)
+{
+    if (input_size < 9 || input_string[2] != ':' || input_string[5] != ':' || input_string[input_size - 1] != 'Z')
+    {
+        return false;
+    }
+
+    if (input_size > 9)
+    {
+        // e.g. `hh:mm:ss.fffZ` or `hh:mm:ss.ffffffZ`
+        if (input_size < 11 || input_size > 16 || input_string[8] != '.')
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+typedef struct {
+    int hour;
+    int minute;
+    int second;
+    int microsecond;
+} time_struct;
+
+inline bool
+parse_time(const char* input_string, Py_ssize_t input_size, time_struct* ts)
+{
+    char* hm_sep_ptr;
+    ts->hour = strtol(input_string, &hm_sep_ptr, 10);
+    char* ms_sep_ptr;
+    ts->minute = strtol(input_string + 3, &ms_sep_ptr, 10);
+    char* sf_sep_ptr;
+    ts->second = strtol(input_string + 6, &sf_sep_ptr, 10);
+    if (hm_sep_ptr != input_string + 2 || ms_sep_ptr != input_string + 5 || sf_sep_ptr != input_string + 8)
+    {
+        return false;
+    }
+
+    if (input_size > 9)
+    {
+        char* end_ptr;
+        int fractional = strtol(input_string + 9, &end_ptr, 10);
+        if (end_ptr != input_string + input_size - 1)
+        {
+            return false;
+        }
+
+        // minimum (len = 11): hh:mm:ss.fZ
+        // maximum (len = 16): hh:mm:ss.ffffffZ
+        ts->microsecond = fractional * fractional_second_scales[16 - input_size];
+    }
+    else
+    {
+        ts->microsecond = 0;
+    }
+
+    return true;
 }
 
 static PyObject*
 create_time(const char* input_string, Py_ssize_t input_size)
 {
-    if (input_size != 9 || input_string[2] != ':' || input_string[5] != ':' || input_string[8] != 'Z')
+    if (!is_valid_time(input_string, input_size))
     {
-        PyErr_Format(PyExc_ValueError, "expected: a date field of the format `hh:mm:ssZ`; got: %.32s (len = %zd)", input_string, input_size);
+        PyErr_Format(PyExc_ValueError, "expected: a time field of the format `hh:mm:ssZ`, or `hh:mm:ss.fZ` to `hh:mm:ss.ffffffZ`; got: %.32s (len = %zd)", input_string, input_size);
         return NULL;
     }
 
-    int hour = atoi(input_string);
-    int minute = atoi(input_string + 3);
-    int second = atoi(input_string + 6);
-    return python_time(hour, minute, second);
+    time_struct ts;
+    if (!parse_time(input_string, input_size, &ts))
+    {
+        PyErr_Format(PyExc_ValueError, "expected: a time field of the format `hh:mm:ssZ`, or `hh:mm:ss.fZ` to `hh:mm:ss.ffffffZ`; got: %s", input_string);
+        return NULL;
+    }
+
+    return python_time(ts.hour, ts.minute, ts.second, ts.microsecond);
 }
 
 inline PyObject*
-python_datetime(int year, int month, int day, int hour, int minute, int second)
+python_datetime(int year, int month, int day, int hour, int minute, int second, int microsecond)
 {
 #if defined(Py_LIMITED_API)
-    return PyObject_CallFunction(datetime_constructor, "iiiiii", year, month, day, hour, minute, second);
+    return PyObject_CallFunction(datetime_constructor, "iiiiiii", year, month, day, hour, minute, second, microsecond);
 #else
-    return PyDateTime_FromDateAndTime(year, month, day, hour, minute, second, 0);
+    return PyDateTime_FromDateAndTime(year, month, day, hour, minute, second, microsecond);
 #endif
 }
 
 #if defined(__AVX2__)
 /**
- * Validates a 16-byte partial date-time string `YYYY-MM-DDTHH:MM`.
+ * Validates a 16-byte partial date-time string `YYYY-MM-DDThh:mm`.
  */
 inline bool
 is_valid_date_hour_minute(__m128i characters)
@@ -256,19 +364,24 @@ is_valid_date_hour_minute(__m128i characters)
 static PyObject*
 create_datetime(const char* input_string, Py_ssize_t input_size)
 {
+    if (input_size < 20 || input_size > 27)
+    {
+        PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ`; got: %.32s (len = %zd)", input_string, input_size);
+        return NULL;
+    }
+
     const __m128i characters = _mm_loadu_si128((__m128i*)input_string);
 
-    if (!is_valid_date_hour_minute(characters) || input_string[16] != ':' || input_string[19] != 'Z')
+    if (!is_valid_date_hour_minute(characters) || input_string[16] != ':' || input_string[input_size - 1] != 'Z')
     {
-        PyErr_SetString(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ` or `YYYY-MM-DD hh:mm:ssZ`");
-        return NULL;
+        goto error;
     }
 
     // convert ASCII characters into digit value (offset from character `0`)
     const __m128i ascii_digit_mask = _mm_setr_epi8(15, 15, 15, 15, 0, 15, 15, 0, 15, 15, 0, 15, 15, 0, 15, 15); // 15 = 0x0F
     const __m128i spread_integers = _mm_and_si128(characters, ascii_digit_mask);
 
-    // group spread digits `YYYY-MM-DD HH:MM:SS` into packed digits `YYYYMMDDHHMMSS--`
+    // group spread digits `YYYY-MM-DD hh:mm:ss` into packed digits `YYYYMMDDhhmmss--`
     const __m128i mask = _mm_set_epi8(-1, -1, 18, 17, 15, 14, 12, 11, 9, 8, 6, 5, 3, 2, 1, 0);
     const __m128i packed_integers = _mm_shuffle_epi8(spread_integers, mask);
 
@@ -286,26 +399,53 @@ create_datetime(const char* input_string, Py_ssize_t input_size)
     int hour = result[8];
     int minute = result[10];
 
-    int second = atoi(input_string + 17);
-    return python_datetime(year, month, day, hour, minute, second);
+    char* sf_sep_ptr;
+    int second = strtol(input_string + 17, &sf_sep_ptr, 10);
+    if (sf_sep_ptr != input_string + 19)
+    {
+        goto error;
+    }
+
+    int fractional = 0;
+    if (input_size > 20)
+    {
+        char* end_ptr;
+        fractional = strtol(input_string + 20, &end_ptr, 10);
+        if (end_ptr != input_string + input_size - 1)
+        {
+            goto error;
+        }
+    }
+
+    // minimum (len = 20): YYYY-MM-DDThh:mm:ssZ
+    // maximum (len = 27): YYYY-MM-DDThh:mm:ss.ffffffZ
+    return python_datetime(year, month, day, hour, minute, second, fractional * fractional_second_scales[27 - input_size]);
+
+error:
+    PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ`; got: %s", input_string);
+    return NULL;
 }
 #else
 static PyObject*
 create_datetime(const char* input_string, Py_ssize_t input_size)
 {
-    if (input_size != 20 || input_string[4] != '-' || input_string[7] != '-' || (input_string[10] != 'T' && input_string[10] != ' ') || input_string[13] != ':' || input_string[16] != ':' || input_string[19] != 'Z')
+    const int DATE_LEN = 11;
+
+    if (input_size < 20 || input_string[4] != '-' || input_string[7] != '-' || (input_string[10] != 'T' && input_string[10] != ' ') || !is_valid_time(input_string + DATE_LEN, input_size - DATE_LEN))
     {
-        PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDTHH:MM:SSZ` or `YYYY-MM-DD HH:MM:SSZ`; got: %.32s (len = %zd)", input_string, input_size);
+        PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ`; got: %.32s (len = %zd)", input_string, input_size);
         return NULL;
     }
 
-    int year = atoi(input_string);
-    int month = atoi(input_string + 5);
-    int day = atoi(input_string + 8);
-    int hour = atoi(input_string + 11);
-    int minute = atoi(input_string + 14);
-    int second = atoi(input_string + 17);
-    return python_datetime(year, month, day, hour, minute, second);
+    date_struct ds;
+    time_struct ts;
+    if (!parse_date(input_string, &ds) || !parse_time(input_string + DATE_LEN, input_size - DATE_LEN, &ts))
+    {
+        PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ`; got: %s", input_string);
+        return NULL;
+    }
+
+    return python_datetime(ds.year, ds.month, ds.day, ts.hour, ts.minute, ts.second, ts.microsecond);
 }
 #endif
 
@@ -330,9 +470,42 @@ create_float(const char* input_string, Py_ssize_t input_size)
     return PyFloat_FromDouble(value);
 }
 
+inline bool
+parse_integer(const char* input_string, Py_ssize_t input_size, long* value)
+{
+    char* end_ptr;
+    *value = strtol(input_string, &end_ptr, 10);
+    return end_ptr == input_string + input_size;
+}
+
 static PyObject*
 create_integer(const char* input_string, Py_ssize_t input_size)
 {
+    if (sizeof(long) >= 8)
+    {
+        if (input_size < 19)
+        {
+            long value;
+            if (!parse_integer(input_string, input_size, &value))
+            {
+                goto error;
+            }
+            return PyLong_FromLong(value);
+        }
+    }
+    else if (sizeof(long) >= 4)
+    {
+        if (input_size < 10)
+        {
+            long value;
+            if (!parse_integer(input_string, input_size, &value))
+            {
+                goto error;
+            }
+            return PyLong_FromLong(value);
+        }
+    }
+
     char* str = PyMem_Malloc(input_size + 1);
     memcpy(str, input_string, input_size);
     str[input_size] = '\0'; // include terminating NUL byte
@@ -344,11 +517,14 @@ create_integer(const char* input_string, Py_ssize_t input_size)
 
     if (len != input_size)
     {
-        PyErr_Format(PyExc_ValueError, "expected: an integer field consisting of an optional sign and decimal digits; got: %.32s (len = %zd)", input_string, input_size);
-        return NULL;
+        goto error;
     }
 
     return result;
+
+error:
+    PyErr_Format(PyExc_ValueError, "expected: an integer field consisting of an optional sign and decimal digits; got: %.32s (len = %zd)", input_string, input_size);
+    return NULL;
 }
 
 static PyObject*
@@ -558,39 +734,103 @@ create_uuid(const char* input_string, Py_ssize_t input_size)
 static PyObject* ipaddress_module;
 static PyObject* ipv4addr_constructor;
 static PyObject* ipv6addr_constructor;
-static PyObject* ipaddr_constructor;
 
 /** Parses an IPv4 address string into an IPv4 address object. */
 static PyObject*
 create_ipv4addr(const char* input_string, Py_ssize_t input_size)
 {
-    return PyObject_CallFunction(ipv4addr_constructor, "s#", input_string, input_size);
+    if (input_size >= INET_ADDRSTRLEN)
+    {
+        PyErr_Format(PyExc_ValueError, "expected: IPv4 address; got: %.32s (len = %zd)", input_string, input_size);
+        return NULL;
+    }
+
+    char addr_str[INET_ADDRSTRLEN];
+    memcpy(addr_str, input_string, input_size);
+    addr_str[input_size] = 0;
+
+    unsigned char addr_net[sizeof(struct in_addr)];
+
+    int status = inet_pton(AF_INET, addr_str, addr_net);
+    if (status <= 0)
+    {
+        PyErr_Format(PyExc_ValueError, "expected: IPv4 address; got: %s", addr_str);
+        return NULL;
+    }
+
+    return PyObject_CallFunction(ipv4addr_constructor, "y#", addr_net, sizeof(struct in_addr));
 }
 
 /** Parses an IPv6 address string into an IPv6 address object. */
 static PyObject*
 create_ipv6addr(const char* input_string, Py_ssize_t input_size)
 {
-    return PyObject_CallFunction(ipv6addr_constructor, "s#", input_string, input_size);
+    if (input_size >= INET6_ADDRSTRLEN)
+    {
+        PyErr_Format(PyExc_ValueError, "expected: IPv6 address; got: %.32s (len = %zd)", input_string, input_size);
+        return NULL;
+    }
+
+    char addr_str[INET6_ADDRSTRLEN];
+    memcpy(addr_str, input_string, input_size);
+    addr_str[input_size] = 0;
+
+    unsigned char addr_net[sizeof(struct in6_addr)];
+
+    int status = inet_pton(AF_INET6, addr_str, addr_net);
+    if (status <= 0)
+    {
+        PyErr_Format(PyExc_ValueError, "expected: IPv6 address; got: %s", addr_str);
+        return NULL;
+    }
+
+    return PyObject_CallFunction(ipv6addr_constructor, "y#", addr_net, sizeof(struct in6_addr));
 }
 
 /** Parses an IPv4 or IPv6 address string into an IPv4 or IPv6 address object. */
 static PyObject*
 create_ipaddr(const char* input_string, Py_ssize_t input_size)
 {
-    return PyObject_CallFunction(ipaddr_constructor, "s#", input_string, input_size);
+    if (input_size >= INET6_ADDRSTRLEN)
+    {
+        PyErr_Format(PyExc_ValueError, "expected: IPv4 or IPv6 address; got: %.32s (len = %zd)", input_string, input_size);
+        return NULL;
+    }
+
+    char addr_str[INET6_ADDRSTRLEN];
+    memcpy(addr_str, input_string, input_size);
+    addr_str[input_size] = 0;
+
+    unsigned char addr_net[sizeof(struct in6_addr)];
+    int status;
+
+    status = inet_pton(AF_INET, addr_str, addr_net);
+    if (status > 0)
+    {
+        return PyObject_CallFunction(ipv4addr_constructor, "y#", addr_net, sizeof(struct in_addr));
+    }
+
+    status = inet_pton(AF_INET6, addr_str, addr_net);
+    if (status > 0)
+    {
+        return PyObject_CallFunction(ipv6addr_constructor, "y#", addr_net, sizeof(struct in6_addr));
+    }
+
+    PyErr_Format(PyExc_ValueError, "expected: IPv4 or IPv6 address; got: %s", addr_str);
+    return NULL;
 }
 
 static PyObject* json_module;
 static PyObject* json_decoder_object;
 static PyObject* json_decode_function;
+static const char* json_format;
 
 static PyObject*
 create_json(const char* input_string, Py_ssize_t input_size)
 {
     if (!is_escaped(input_string, input_size))
     {
-        return PyObject_CallFunction(json_decode_function, "s#", input_string, input_size);
+        return PyObject_CallFunction(json_decode_function, json_format, input_string, input_size);
     }
 
     char* output_string;
@@ -602,7 +842,7 @@ create_json(const char* input_string, Py_ssize_t input_size)
         return NULL;
     }
 
-    PyObject* result = PyObject_CallFunction(json_decode_function, "s#", output_string, output_size);
+    PyObject* result = PyObject_CallFunction(json_decode_function, json_format, output_string, output_size);
     PyMem_Free(output_string);
     return result;
 }
@@ -1062,10 +1302,18 @@ PyInit_parser(void)
     {
         return NULL;
     }
-    ipaddr_constructor = PyObject_GetAttrString(ipaddress_module, "ip_address");
-    if (!ipaddr_constructor)
+
+    /* import module `orjson` */
+    json_module = PyImport_ImportModule("orjson");
+    if (json_module)
     {
-        return NULL;
+        json_decode_function = PyObject_GetAttrString(json_module, "loads");
+        json_format = "y#";
+        return PyModule_Create(&TsvParserModule);
+    }
+    else
+    {
+        PyErr_Clear();
     }
 
     /* import module `json` */
@@ -1086,6 +1334,7 @@ PyInit_parser(void)
         return NULL;
     }
     json_decode_function = PyObject_GetAttrString(json_decoder_object, "decode");
+    json_format = "s#";
 
     return PyModule_Create(&TsvParserModule);
 }

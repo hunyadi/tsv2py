@@ -53,8 +53,9 @@ The parser understands the following Python types:
 * `None`. This special value is returned for the TSV escape sequence `\N`.
 * `bool`. A literal `true` or `false` is converted into a boolean value.
 * `bytes`. TSV escape sequences are reversed before the data is passed to Python as a `bytes` object. NUL bytes are permitted.
-* `date`. The input has to conform to the format `YYYY-MM-DD`.
 * `datetime`. The input has to comply with RFC 3339 and ISO 8601. The timezone must be UTC (a.k.a. suffix `Z`).
+* `date`. The input has to conform to the format `YYYY-MM-DD`.
+* `time`. The input has to conform to the format `hh:mm:ssZ` with no fractional seconds, or `hh:mm:ss.ffffffZ` with fractional seconds. Fractional seconds allow up to 6 digits of precision.
 * `float`. Interpreted as double precision floating point numbers.
 * `int`. Arbitrary-length integers are allowed.
 * `str`. TSV escape sequences are reversed before the data is passed to Python as a `str`. NUL bytes are not allowed.
@@ -62,7 +63,7 @@ The parser understands the following Python types:
 * `decimal.Decimal`. Interpreted as arbitrary precision decimal numbers.
 * `ipaddress.IPv4Address`.
 * `ipaddress.IPv6Address`.
-* `list` and `dict`, which are understood as JSON, and invoke `json.loads` to parse a serialized JSON string.
+* `list` and `dict`, which are understood as JSON, and invoke the equivalent of `json.loads` to parse a serialized JSON string.
 
 The backslash character `\` is both a TSV and a JSON escape sequence initiator. When JSON data is written to TSV, several backslash characters may be needed, e.g. `\\n` in a quoted JSON string translates to a single newline character. First, `\\` in `\\n` is understood as an escape sequence by the TSV parser to produce a single `\` character followed by an `n` character, and in turn `\n` is understood as a single newline embedded in a JSON string by the JSON parser. Specifically, you need four consecutive backslash characters in TSV to represent a single backslash in a JSON quoted string.
 
@@ -71,3 +72,39 @@ Internally, the implementation uses AVX2 instructions to
 * parse RFC 3339 date-time strings into Python `datetime` objects,
 * parse RFC 4122 UUID strings or 32-digit hexadecimal strings into Python `UUID` objects,
 * and find `\t` delimiters between fields in a line.
+
+For parsing integers up to the range of the `long` type, the parser calls the C standard library function [strtol](https://en.cppreference.com/w/c/string/byte/strtol).
+
+For parsing IPv4 and IPv6 addresses, the parser calls the C function [inet_pton](https://man7.org/linux/man-pages/man3/inet_pton.3.html) in libc or Windows Sockets (WinSock2).
+
+If installed, the parser employs [orjson](https://github.com/ijl/orjson) to improve parsing speed of nested JSON structures. If not available, the library falls back to the [built-in JSON decoder](https://docs.python.org/3/library/json.html).
+
+### Date-time format
+
+```
+YYYY-MM-DDThh:mm:ssZ
+YYYY-MM-DDThh:mm:ss.fZ
+YYYY-MM-DDThh:mm:ss.ffZ
+YYYY-MM-DDThh:mm:ss.fffZ
+YYYY-MM-DDThh:mm:ss.ffffZ
+YYYY-MM-DDThh:mm:ss.fffffZ
+YYYY-MM-DDThh:mm:ss.ffffffZ
+```
+
+### Date format
+
+```
+YYYY-MM-DD
+```
+
+### Time format
+
+```
+hh:mm:ssZ
+hh:mm:ss.fZ
+hh:mm:ss.ffZ
+hh:mm:ss.fffZ
+hh:mm:ss.ffffZ
+hh:mm:ss.fffffZ
+hh:mm:ss.ffffffZ
+```

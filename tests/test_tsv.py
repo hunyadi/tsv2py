@@ -65,14 +65,70 @@ class TestParseRecord(unittest.TestCase):
             b"0",
             b"56",
             b"+56",
+            b"2147483647",
+            b"-2147483648",
+            b"9223372036854775807",
+            b"-9223372036854775808",
+            b"9999999999999999999",
         )
         py_record = (
             -56,
             0,
             56,
             56,
+            2147483647,
+            -2147483648,
+            9223372036854775807,
+            -9223372036854775808,
+            9999999999999999999,
         )
-        self.assertEqual(parse_record("iiii", tsv_record), py_record)
+        self.assertEqual(parse_record("i" * len(tsv_record), tsv_record), py_record)
+
+    def test_datetime(self) -> None:
+        tsv_record = (
+            b"1989-10-23T23:59:59Z",
+            b"1989-10-23T23:59:59.1Z",
+            b"1989-10-23T23:59:59.12Z",
+            b"1989-10-23T23:59:59.123Z",
+            b"1989-10-23T23:59:59.1234Z",
+            b"1989-10-23T23:59:59.12345Z",
+            b"1989-10-23T23:59:59.123456Z",
+            b"1989-10-23T23:59:59.000001Z",
+        )
+        py_record = (
+            datetime.datetime(1989, 10, 23, 23, 59, 59),
+            datetime.datetime(1989, 10, 23, 23, 59, 59, 100000),
+            datetime.datetime(1989, 10, 23, 23, 59, 59, 120000),
+            datetime.datetime(1989, 10, 23, 23, 59, 59, 123000),
+            datetime.datetime(1989, 10, 23, 23, 59, 59, 123400),
+            datetime.datetime(1989, 10, 23, 23, 59, 59, 123450),
+            datetime.datetime(1989, 10, 23, 23, 59, 59, 123456),
+            datetime.datetime(1989, 10, 23, 23, 59, 59, 1),
+        )
+        self.assertEqual(parse_record("T" * len(tsv_record), tsv_record), py_record)
+
+    def test_time(self) -> None:
+        tsv_record = (
+            b"23:59:59Z",
+            b"23:59:59.1Z",
+            b"23:59:59.12Z",
+            b"23:59:59.123Z",
+            b"23:59:59.1234Z",
+            b"23:59:59.12345Z",
+            b"23:59:59.123456Z",
+            b"23:59:59.000001Z",
+        )
+        py_record = (
+            datetime.time(23, 59, 59),
+            datetime.time(23, 59, 59, 100000),
+            datetime.time(23, 59, 59, 120000),
+            datetime.time(23, 59, 59, 123000),
+            datetime.time(23, 59, 59, 123400),
+            datetime.time(23, 59, 59, 123450),
+            datetime.time(23, 59, 59, 123456),
+            datetime.time(23, 59, 59, 1),
+        )
+        self.assertEqual(parse_record("t" * len(tsv_record), tsv_record), py_record)
 
     def test_uuid(self) -> None:
         tsv_record = (
@@ -104,7 +160,7 @@ class TestParseRecord(unittest.TestCase):
             ["string"],
             ["backslash: \\", "newline: \n"],
         )
-        self.assertEqual(parse_record("jjjjjj", tsv_record), py_record)
+        self.assertEqual(parse_record("j" * len(tsv_record), tsv_record), py_record)
 
 
 class TestParseLine(unittest.TestCase):

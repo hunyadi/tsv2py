@@ -1,13 +1,14 @@
 import random
+import typing
 import unittest
 from datetime import date, datetime, timezone
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import IPv4Address, IPv6Address, ip_address
 from json import JSONDecoder
 from timeit import timeit
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Tuple, Union
 from uuid import UUID
 
-from tsv.helper import types_to_format_str, unescape
+from tsv.helper import is_union_like, types_to_format_str, unescape
 from tsv.parser import parse_line, parse_record
 
 
@@ -37,6 +38,10 @@ def parse_ipv4addr(s: bytes) -> IPv4Address:
 
 def parse_ipv6addr(s: bytes) -> IPv6Address:
     return IPv6Address(s.decode("ascii"))
+
+
+def parse_ipaddr(s: bytes) -> IPv4Address:
+    return ip_address(s.decode("ascii"))
 
 
 DECODER = JSONDecoder()
@@ -69,8 +74,13 @@ def type_to_converter(typ: type) -> Callable[[bytes], Any]:
         return parse_ipv6addr
     elif typ is list or typ is dict:
         return parse_json
-    else:
-        raise TypeError(f"conversion for type `{typ}` is not supported")
+
+    if is_union_like(typ):
+        args = typing.get_args(typ)
+        if len(args) == 2 and IPv4Address in args and IPv6Address in args:
+            return parse_ipaddr
+
+    raise TypeError(f"conversion for type `{typ}` is not supported")
 
 
 def types_to_converters(fields: Tuple[type, ...]) -> Tuple[Callable[[bytes], Any], ...]:
@@ -134,6 +144,7 @@ class TestPerformance(unittest.TestCase):
         bool,
         IPv4Address,
         IPv6Address,
+        Union[IPv4Address, IPv6Address],
         list,
         dict,
     )
@@ -147,6 +158,7 @@ class TestPerformance(unittest.TestCase):
         str(UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")).encode("ascii"),
         b"true",
         b"192.0.2.0",
+        b"2001:DB8:0:0:8:800:200C:417A",
         b"2001:DB8:0:0:8:800:200C:417A",
         b"[1,2,3,4,5,6,7,8,9]",
         b'{"string": "value", "integer": 82, "float": 23.45}',
