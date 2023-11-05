@@ -34,16 +34,26 @@ if os.getenv("TSV_AVX2", "1") == "1":
 else:
     print("compiling without AVX2")
 
+if os.getenv("TSV_LIMITED_API", "1") == "1":
+    print("compiling with limited C API")
+    define_macros = [("Py_LIMITED_API", "0x03080000")]
+    limited_api = True
+else:
+    print("compiling with regular C API")
+    define_macros = []
+    limited_api = False
+
 setup_args = dict(
     ext_modules=[
         Extension(
             "tsv.parser",
             ["lib/tsv_parser.c"],
             extra_compile_args=compile_args,
+            extra_link_args=[],
             include_dirs=["lib"],
-            define_macros=[("Py_LIMITED_API", "0x03080000")],
+            define_macros=define_macros,
             language="c",
-            py_limited_api=True,
+            py_limited_api=limited_api,
         )
     ],
     cmdclass={"bdist_wheel": bdist_wheel_abi3},

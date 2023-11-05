@@ -6,7 +6,9 @@
 #include <string.h>
 
 #if defined(_WIN32) || defined(_WIN64)
+#define WIN32_LEAN_AND_MEAN
 #include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
 #else
 #include <arpa/inet.h>
 #endif
@@ -1170,13 +1172,14 @@ tsv_parse_file(PyObject* self, PyObject* args)
 
             if (cache_size > 0)
             {
-                memcpy(cache_data + cache_size, buf_beg, chunk_size);
-                if (cache_size + chunk_size > (Py_ssize_t)sizeof(cache_data))
+                if (cache_size + chunk_size >= (Py_ssize_t)sizeof(cache_data))
                 {
                     PyErr_SetString(PyExc_RuntimeError, "insufficient cache size to load record");
                     return NULL;
                 }
+                memcpy(cache_data + cache_size, buf_beg, chunk_size);
                 cache_size += chunk_size;
+                cache_data[cache_size] = 0;
 
                 line_string = cache_data;
                 line_size = cache_size;
@@ -1231,7 +1234,8 @@ static struct PyModuleDef TsvParserModule = {
     "Parses TSV fields into a tuple of Python objects.",
     /* size of per-interpreter state of the module, or -1 if the module keeps state in global variables. */
     -1,
-    TsvParserMethods };
+    TsvParserMethods
+};
 
 PyMODINIT_FUNC
 PyInit_parser(void)
