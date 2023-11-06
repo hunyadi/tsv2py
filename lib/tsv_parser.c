@@ -5,6 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if !defined(PY_MAJOR_VERSION) || !defined(PY_MINOR_VERSION) || PY_MAJOR_VERSION < 3 || (PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION < 8)
+#error This extension requires Python 3.8 or later.
+#endif
+
 #if defined(_WIN32) || defined(_WIN64)
 #define WIN32_LEAN_AND_MEAN
 #include <ws2tcpip.h>
@@ -45,8 +49,10 @@ debug_print_256(__m256i value)
 #endif
 #endif
 
-#if defined(_WIN32)
-#define _mm_tzcnt_32(x) _tzcnt_u32(x)
+#if defined(__GNUC__)
+#define tzcnt_32(x) __builtin_ctz(x)
+#elif defined(_WIN32)
+#define tzcnt_32(x) _tzcnt_u32(x)
 #endif
 
 #if defined(Py_LIMITED_API)
@@ -1019,7 +1025,7 @@ parse_line(const char* field_types, Py_ssize_t field_count, const char* line_str
 
         while (mask)
         {
-            unsigned int offset = _mm_tzcnt_32(mask);
+            unsigned int offset = tzcnt_32(mask);
             mask &= ~(1 << offset);
 
             field_end = scan_start + offset;
@@ -1237,6 +1243,9 @@ static struct PyModuleDef TsvParserModule = {
     TsvParserMethods
 };
 
+#if defined(__GNUC__)
+__attribute__((visibility("default")))
+#endif
 PyMODINIT_FUNC
 PyInit_parser(void)
 {

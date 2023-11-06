@@ -40,7 +40,7 @@ def parse_ipv6addr(s: bytes) -> IPv6Address:
     return IPv6Address(s.decode("ascii"))
 
 
-def parse_ipaddr(s: bytes) -> IPv4Address:
+def parse_ipaddr(s: bytes) -> Union[IPv4Address, IPv6Address]:
     return ip_address(s.decode("ascii"))
 
 
