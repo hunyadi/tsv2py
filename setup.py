@@ -3,14 +3,14 @@
 
 import os
 import sys
-from typing import Tuple
+from typing import Optional
 
 from setuptools import Extension, setup
 from wheel.bdist_wheel import bdist_wheel
 
 
 class bdist_wheel_abi3(bdist_wheel):
-    def get_tag(self) -> Tuple[str, str, str]:
+    def get_tag(self) -> tuple[str, str, str]:
         python, abi, plat = super().get_tag()
 
         if python.startswith("cp"):
@@ -34,6 +34,7 @@ if os.getenv("TSV_AVX2", "1") == "1":
 else:
     print("compiling without AVX2")
 
+define_macros: list[tuple[str, Optional[str]]]
 if os.getenv("TSV_LIMITED_API", "1") == "1":
     print("compiling with limited C API")
     define_macros = [("Py_LIMITED_API", "0x03080000")]
@@ -43,21 +44,21 @@ else:
     define_macros = []
     limited_api = False
 
-setup_args = dict(
-    ext_modules=[
-        Extension(
-            "tsv.parser",
-            ["lib/tsv_parser.c"],
-            extra_compile_args=compile_args,
-            extra_link_args=[],
-            include_dirs=["lib"],
-            define_macros=define_macros,
-            language="c",
-            py_limited_api=limited_api,
-        )
-    ],
-    cmdclass={"bdist_wheel": bdist_wheel_abi3},
-)
+extension_modules = [
+    Extension(
+        "tsv.parser",
+        ["lib/tsv_parser.c"],
+        extra_compile_args=compile_args,
+        extra_link_args=[],
+        include_dirs=["lib"],
+        define_macros=define_macros,
+        language="c",
+        py_limited_api=limited_api,
+    )
+]
 
 if __name__ == "__main__":
-    setup(**setup_args)
+    setup(
+        ext_modules=extension_modules,
+        cmdclass={"bdist_wheel": bdist_wheel_abi3},
+    )

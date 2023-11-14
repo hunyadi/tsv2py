@@ -159,7 +159,7 @@ class TestPerformance(unittest.TestCase):
         b"true",
         b"192.0.2.0",
         b"2001:DB8:0:0:8:800:200C:417A",
-        b"2001:DB8:0:0:8:800:200C:417A",
+        b"2001:db8:0:0:8:800:200c:417a",
         b"[1,2,3,4,5,6,7,8,9]",
         b'{"string": "value", "integer": 82, "float": 23.45}',
     )
