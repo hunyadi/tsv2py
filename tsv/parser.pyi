@@ -20,6 +20,7 @@ def parse_record(field_types: str, record: Tuple[bytes, ...]) -> Tuple[Any, ...]
         * `6` for `IPv6Address`
         * 'n' for network address (either IPv4 or IPv6)
         * `j` for serialized JSON
+        * `_` to skip a field without parsing
 
     :param field_types: Identifies the expected type of each field.
     :param record: A tuple of `bytes` objects, each corresponding to the represented value of a field.

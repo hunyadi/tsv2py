@@ -28,6 +28,7 @@ class TestParseRecord(unittest.TestCase):
             b"2001:DB8:0:0:8:800:200C:417A",
             b'["one","two","three"]',
             b'{"string": "value", "number": 87}',
+            b"<!-- omitted field -->",
         )
         py_record = (
             "árvíztűrő tükörfúrógép".encode("utf-8"),
@@ -44,19 +45,18 @@ class TestParseRecord(unittest.TestCase):
             IPv6Address("2001:DB8:0:0:8:800:200C:417A"),
             ["one", "two", "three"],
             {"string": "value", "number": 87},
+            None,
         )
         signature = "".join(
-            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j", "j"]
+            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j", "j", "_"]
         )
         self.assertEqual(parse_record(signature, tsv_record), py_record)
 
     def test_none(self) -> None:
-        tsv_record = tuple(b"\N" for _ in range(13))
-        py_record = tuple(None for _ in range(13))
-
-        signature = "".join(
-            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j"]
-        )
+        typ = ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j", "_"]
+        tsv_record = tuple(b"\N" for _ in range(len(typ)))
+        py_record = tuple(None for _ in range(len(typ)))
+        signature = "".join(typ)
         self.assertEqual(parse_record(signature, tsv_record), py_record)
 
     def test_integer(self) -> None:
@@ -180,6 +180,7 @@ class TestParseLine(unittest.TestCase):
                 b"192.0.2.0",
                 b"2001:DB8:0:0:8:800:200C:417A",
                 b'{"string":"value","number":87}',
+                b"<!-- omitted field -->",
             ]
         )
         py_record = (
@@ -196,18 +197,18 @@ class TestParseLine(unittest.TestCase):
             IPv4Address("192.0.2.0"),
             IPv6Address("2001:DB8:0:0:8:800:200C:417A"),
             {"string": "value", "number": 87},
+            None,
         )
         signature = "".join(
-            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j"]
+            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j", "_"]
         )
         self.assertEqual(parse_line(signature, tsv_record), py_record)
 
     def test_none(self) -> None:
-        tsv_record = b"\t".join(b"\N" for _ in range(13))
-        py_record = tuple(None for _ in range(13))
-        signature = "".join(
-            ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j"]
-        )
+        typ = ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j", "_"]
+        tsv_record = b"\t".join(b"\N" for _ in range(len(typ)))
+        py_record = tuple(None for _ in range(len(typ)))
+        signature = "".join(typ)
         self.assertEqual(parse_line(signature, tsv_record), py_record)
 
     def test_field_count(self) -> None:

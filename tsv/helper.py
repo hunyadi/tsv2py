@@ -86,6 +86,8 @@ def type_to_format_char(typ: type) -> str:
         return "6"
     elif typ is list or typ is dict:  # serialized JSON
         return "j"
+    elif typ is types.NoneType:
+        return "_"
 
     if is_union_like(typ):
         args = typing.get_args(typ)

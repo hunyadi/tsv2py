@@ -902,6 +902,10 @@ create_any(char field_type, const char* input_string, Py_ssize_t input_size)
     case 'j':
         return create_json(input_string, input_size);
 
+    case '_':
+        // skip field without parsing
+        Py_RETURN_NONE;
+
     default:
         PyErr_SetString(PyExc_TypeError, "expected: a field type string consisting of specifiers "
             "`b` (`bytes`), "
@@ -915,9 +919,10 @@ create_any(char field_type, const char* input_string, Py_ssize_t input_size)
             "`.` (`decimal.Decimal`), "
             "`u` (`uuid.UUID`), "
             "`4` (`ipaddress.IPv6Address`), "
-            "`6` (`ipaddress.IPv6Address`) or "
-            "`n` (IPv4 or IPv6 address) or "
-            "`j` (serialized JSON)"
+            "`6` (`ipaddress.IPv6Address`), "
+            "`n` (IPv4 or IPv6 address), "
+            "`j` (serialized JSON) or "
+            "`_` (skip field)"
         );
         return NULL;
     }
