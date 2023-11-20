@@ -12,7 +12,7 @@ from tsv.helper import Parser
 # specify the column structure
 parser = Parser(fields=(bytes, date, datetime, float, int, str, UUID, bool))
 
-# read and parse an entire file 
+# read and parse an entire file
 with open(tsv_path, "rb") as f:
     py_records = parser.parse_file(f)
 
@@ -108,3 +108,7 @@ hh:mm:ss.ffffZ
 hh:mm:ss.fffffZ
 hh:mm:ss.ffffffZ
 ```
+
+## Performance
+
+Depending on the field types, *tsv2py* is up to 7 times faster to parse TSV records than a functionally equivalent Python implementation based on the Python standard library. Savings in execution time are more substantial for dates, UUIDs and longer strings with special characters (up to 90% savings), and they are more moderate for simple types like small integers (approx. 60% savings).

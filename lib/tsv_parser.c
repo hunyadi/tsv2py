@@ -1228,6 +1228,20 @@ tsv_parse_file(PyObject* self, PyObject* args)
 
     /* cleanup */
     Py_DECREF(read_method);
+
+    if (cache_size > 0)
+    {
+        PyObject* item = parse_line(field_types, field_count, cache_data, cache_size);
+        if (!item)
+        {
+            Py_DECREF(result);
+            return NULL;
+        }
+
+        PyList_Append(result, item);
+        Py_DECREF(item);
+    }
+
     return result;
 }
 
