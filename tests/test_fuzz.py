@@ -10,7 +10,7 @@ from uuid import UUID
 from tsv.helper import Generator, Parser
 
 _random_map: Dict[type, Callable[[], Any]] = {
-    bytes: lambda: random.randbytes(random.randint(0, 100)),
+    bytes: lambda: bytes(random.randint(0, 255) for _ in range(100)),
     datetime: lambda: datetime.now().replace(microsecond=0),
     float: lambda: random.random(),
     int: lambda: random.randint(-(2**32), 2 * 32),

@@ -10,7 +10,7 @@ from timeit import timeit
 from typing import Any, Callable, List, Tuple, Union
 from uuid import UUID
 
-from tsv.helper import escape, is_union_like, types_to_format_str, unescape
+from tsv.helper import is_union_like, types_to_format_str, unescape
 from tsv.parser import parse_file, parse_line, parse_record
 
 
@@ -124,7 +124,7 @@ def type_to_str_converter(typ: type) -> Callable[[str], Any]:
     elif typ is UUID:
         return UUID
     elif typ is bytes:
-        return bytes
+        return lambda s: bytes(s, "utf-8")
     elif typ is IPv4Address:
         return IPv4Address
     elif typ is IPv6Address:
@@ -156,7 +156,7 @@ def process_record_python(
     converters: Tuple[Callable[[bytes], Any], ...], tsv_record: tuple
 ) -> tuple:
     return tuple(
-        converter(field) if field != b"\N" else None
+        converter(field) if field != rb"\N" else None
         for (converter, field) in zip(converters, tsv_record)
     )
 
@@ -165,13 +165,13 @@ def process_line_python(
     converters: Tuple[Callable[[bytes], Any], ...], tsv_line: bytes
 ) -> tuple:
     return tuple(
-        converter(field) if field != b"\N" else None
+        converter(field) if field != rb"\N" else None
         for (converter, field) in zip(converters, tsv_line.split(b"\t"))
     )
 
 
 def process_file_python(
-    converters: Tuple[Callable[[bytes], Any], ...], data: bytes
+    converters: Tuple[Callable[[str], Any], ...], data: bytes
 ) -> List[tuple]:
     with StringIO(data.decode("utf-8"), newline="") as f:
         reader = csv.reader(f, dialect="excel-tab", strict=True)

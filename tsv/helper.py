@@ -86,7 +86,7 @@ def type_to_format_char(typ: type) -> str:
         return "6"
     elif typ is list or typ is dict:  # serialized JSON
         return "j"
-    elif typ is types.NoneType:
+    elif typ is type(None):
         return "_"
 
     if is_union_like(typ):
@@ -111,7 +111,7 @@ def generate_value(val: Any) -> bytes:
     "Returns the TSV representation of a Python object."
 
     if val is None:
-        return b"\\N"
+        return rb"\N"
     elif isinstance(val, bool):
         return b"true" if val else b"false"
     elif isinstance(val, bytes):

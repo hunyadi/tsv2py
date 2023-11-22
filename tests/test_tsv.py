@@ -54,7 +54,7 @@ class TestParseRecord(unittest.TestCase):
 
     def test_none(self) -> None:
         typ = ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j", "_"]
-        tsv_record = tuple(b"\N" for _ in range(len(typ)))
+        tsv_record = tuple(rb"\N" for _ in range(len(typ)))
         py_record = tuple(None for _ in range(len(typ)))
         signature = "".join(typ)
         self.assertEqual(parse_record(signature, tsv_record), py_record)
@@ -206,7 +206,7 @@ class TestParseLine(unittest.TestCase):
 
     def test_none(self) -> None:
         typ = ["b", "d", "t", "T", "f", "i", "s", "u", "z", ".", "4", "6", "j", "_"]
-        tsv_record = b"\t".join(b"\N" for _ in range(len(typ)))
+        tsv_record = b"\t".join(rb"\N" for _ in range(len(typ)))
         py_record = tuple(None for _ in range(len(typ)))
         signature = "".join(typ)
         self.assertEqual(parse_line(signature, tsv_record), py_record)
