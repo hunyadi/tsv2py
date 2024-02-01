@@ -1,5 +1,4 @@
 /build
 /dist
 /*.egg-info
-/package.sh
 __pycache__

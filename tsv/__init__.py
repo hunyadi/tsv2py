@@ -6,8 +6,8 @@ The parser can read a TSV record into a Python tuple consisting of built-in Pyth
 The generator can produce a TSV record from a tuple.
 """
 
-__version__ = "0.5.2"
+__version__ = "0.6.0"
 __author__ = "Levente Hunyadi"
-__copyright__ = "Copyright 2023, Levente Hunyadi"
+__copyright__ = "Copyright 2023-2024, Levente Hunyadi"
 __license__ = "MIT"
 __maintainer__ = "Levente Hunyadi"
