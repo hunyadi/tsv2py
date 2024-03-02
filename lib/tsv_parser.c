@@ -180,14 +180,76 @@ python_date(int year, int month, int day)
 #endif
 }
 
-typedef struct {
+struct date_struct
+{
     int year;
     int month;
     int day;
-} date_struct;
+};
 
+#if defined(__AVX2__)
+/** Parses an RFC 3339 date string with SIMD instructions. */
 inline bool
-parse_date(const char* input_string, date_struct* ds)
+parse_date(const char* input_string, struct date_struct* ds)
+{
+    char buf[16] = { 0 };
+    memcpy(buf, input_string, 10);
+    const __m128i characters = _mm_loadu_si128((const __m128i*)buf);
+
+    // validate a date string `YYYY-MM-DD`
+    const __m128i lower_bound = _mm_setr_epi8(
+        48, 48, 48, 48,                    // year; 48 = ASCII '0'
+        45,                                // ASCII '-'
+        48, 48,                            // month
+        45,                                // ASCII '-'
+        48, 48,                            // day
+        -128, -128, -128, -128, -128, -128 // don't care
+    );
+    const __m128i upper_bound = _mm_setr_epi8(
+        57, 57, 57, 57,              // year; 57 = ASCII '9'
+        45,                          // ASCII '-'
+        49, 57,                      // month
+        45,                          // ASCII '-'
+        51, 57,                      // day
+        127, 127, 127, 127, 127, 127 // don't care
+    );
+
+    const __m128i too_low = _mm_cmpgt_epi8(lower_bound, characters);
+    const __m128i too_high = _mm_cmpgt_epi8(characters, upper_bound);
+    const int out_of_bounds = _mm_movemask_epi8(too_low) | _mm_movemask_epi8(too_high);
+    if (out_of_bounds)
+    {
+        return false;
+    }
+
+    // convert ASCII characters into digit value (offset from character `0`)
+    const __m128i ascii_digit_mask = _mm_setr_epi8(15, 15, 15, 15, 0, 15, 15, 0, 15, 15, 0, 0, 0, 0, 0, 0);
+    const __m128i spread_integers = _mm_and_si128(characters, ascii_digit_mask);
+
+    // group spread digits `YYYY-MM-DD------` into packed digits `YYYYMMDD--------`
+    const __m128i mask = _mm_setr_epi8(
+        0, 1, 2, 3, // year
+        5, 6,       // month
+        8, 9,       // day
+        -1, -1, -1, -1, -1, -1, -1, -1);
+    const __m128i grouped_integers = _mm_shuffle_epi8(spread_integers, mask);
+
+    // extract values
+    union
+    {
+        char c[8];
+        int64_t i;
+    } value;
+    value.i = _mm_cvtsi128_si64(grouped_integers);
+
+    ds->year = 1000 * value.c[0] + 100 * value.c[1] + 10 * value.c[2] + value.c[3];
+    ds->month = 10 * value.c[4] + value.c[5];
+    ds->day = 10 * value.c[6] + value.c[7];
+    return true;
+}
+#else
+inline bool
+parse_date(const char* input_string, struct date_struct* ds)
 {
     char* ym_sep_ptr;
     ds->year = strtol(input_string, &ym_sep_ptr, 10);
@@ -203,6 +265,7 @@ parse_date(const char* input_string, date_struct* ds)
 
     return true;
 }
+#endif
 
 static PyObject*
 create_date(const char* input_string, Py_ssize_t input_size)
@@ -213,7 +276,7 @@ create_date(const char* input_string, Py_ssize_t input_size)
         return NULL;
     }
 
-    date_struct ds;
+    struct date_struct ds;
     if (!parse_date(input_string, &ds))
     {
         PyErr_Format(PyExc_ValueError, "expected: a date field of the format `YYYY-MM-DD`; got: %s", input_string);
@@ -253,15 +316,16 @@ is_valid_time(const char* input_string, Py_ssize_t input_size)
     return true;
 }
 
-typedef struct {
+struct time_struct
+{
     int hour;
     int minute;
     int second;
     int microsecond;
-} time_struct;
+};
 
 inline bool
-parse_time(const char* input_string, Py_ssize_t input_size, time_struct* ts)
+parse_time(const char* input_string, Py_ssize_t input_size, struct time_struct* ts)
 {
     char* hm_sep_ptr;
     ts->hour = strtol(input_string, &hm_sep_ptr, 10);
@@ -304,7 +368,7 @@ create_time(const char* input_string, Py_ssize_t input_size)
         return NULL;
     }
 
-    time_struct ts;
+    struct time_struct ts;
     if (!parse_time(input_string, input_size, &ts))
     {
         PyErr_Format(PyExc_ValueError, "expected: a time field of the format `hh:mm:ssZ`, or `hh:mm:ss.fZ` to `hh:mm:ss.ffffffZ`; got: %s", input_string);
@@ -323,6 +387,12 @@ python_datetime(int year, int month, int day, int hour, int minute, int second, 
     return PyDateTime_FromDateAndTime(year, month, day, hour, minute, second, microsecond);
 #endif
 }
+
+struct datetime_struct
+{
+    struct date_struct date;
+    struct time_struct time;
+};
 
 #if defined(__AVX2__)
 /**
@@ -354,14 +424,14 @@ is_valid_date_hour_minute(__m128i characters)
         53, 57          // minute
     );
 
-    const __m128i all_ones = _mm_set1_epi8(-1); // 128 bits of 1s
-
     const __m128i too_low = _mm_cmpgt_epi8(lower_bound, characters);
     const __m128i too_high = _mm_cmpgt_epi8(characters, upper_bound);
-    const __m128i out_of_bounds = _mm_or_si128(too_low, too_high);
-    const int within_range = _mm_test_all_zeros(out_of_bounds, all_ones);
-
-    return within_range;
+    const int out_of_bounds = _mm_movemask_epi8(too_low) | _mm_movemask_epi8(too_high);
+    if (out_of_bounds)
+    {
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -369,20 +439,19 @@ is_valid_date_hour_minute(__m128i characters)
  *
  * @see https://movermeyer.com/2023-01-04-rfc-3339-simd/
  */
-static PyObject*
-create_datetime(const char* input_string, Py_ssize_t input_size)
+inline bool
+parse_datetime(const char* input_string, Py_ssize_t input_size, struct datetime_struct* dt)
 {
     if (input_size < 20 || input_size > 27)
     {
-        PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ`; got: %.32s (len = %zd)", input_string, input_size);
-        return NULL;
+        return false;
     }
 
     const __m128i characters = _mm_loadu_si128((__m128i*)input_string);
 
     if (!is_valid_date_hour_minute(characters) || input_string[16] != ':' || input_string[input_size - 1] != 'Z')
     {
-        goto error;
+        return false;
     }
 
     // convert ASCII characters into digit value (offset from character `0`)
@@ -401,17 +470,17 @@ create_datetime(const char* input_string, Py_ssize_t input_size)
     char result[16];
     _mm_storeu_si128((__m128i*)result, values);
 
-    int year = (result[0] * 100) + result[2];
-    int month = result[4];
-    int day = result[6];
-    int hour = result[8];
-    int minute = result[10];
+    dt->date.year = (result[0] * 100) + result[2];
+    dt->date.month = result[4];
+    dt->date.day = result[6];
+    dt->time.hour = result[8];
+    dt->time.minute = result[10];
 
     char* sf_sep_ptr;
-    int second = strtol(input_string + 17, &sf_sep_ptr, 10);
+    dt->time.second = strtol(input_string + 17, &sf_sep_ptr, 10);
     if (sf_sep_ptr != input_string + 19)
     {
-        goto error;
+        return false;
     }
 
     int fractional = 0;
@@ -421,41 +490,46 @@ create_datetime(const char* input_string, Py_ssize_t input_size)
         fractional = strtol(input_string + 20, &end_ptr, 10);
         if (end_ptr != input_string + input_size - 1)
         {
-            goto error;
+            return false;
         }
     }
 
     // minimum (len = 20): YYYY-MM-DDThh:mm:ssZ
     // maximum (len = 27): YYYY-MM-DDThh:mm:ss.ffffffZ
-    return python_datetime(year, month, day, hour, minute, second, fractional * fractional_second_scales[27 - input_size]);
-
-error:
-    PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ`; got: %s", input_string);
-    return NULL;
+    dt->time.microsecond = fractional * fractional_second_scales[27 - input_size];
+    return true;
 }
 #else
-static PyObject*
-create_datetime(const char* input_string, Py_ssize_t input_size)
+inline bool
+parse_datetime(const char* input_string, Py_ssize_t input_size, struct datetime_struct* dt)
 {
     const int DATE_LEN = 11;
 
     if (input_size < 20 || input_string[4] != '-' || input_string[7] != '-' || (input_string[10] != 'T' && input_string[10] != ' ') || !is_valid_time(input_string + DATE_LEN, input_size - DATE_LEN))
     {
+        return false;
+    }
+
+    if (!parse_date(input_string, &dt->date) || !parse_time(input_string + DATE_LEN, input_size - DATE_LEN, &dt->time))
+    {
+        return false;
+    }
+
+    return true;
+}
+#endif
+
+static PyObject*
+create_datetime(const char* input_string, Py_ssize_t input_size)
+{
+    struct datetime_struct dt;
+    if (!parse_datetime(input_string, input_size, &dt))
+    {
         PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ`; got: %.32s (len = %zd)", input_string, input_size);
         return NULL;
     }
-
-    date_struct ds;
-    time_struct ts;
-    if (!parse_date(input_string, &ds) || !parse_time(input_string + DATE_LEN, input_size - DATE_LEN, &ts))
-    {
-        PyErr_Format(PyExc_ValueError, "expected: a datetime field of the format `YYYY-MM-DDThh:mm:ssZ`; got: %s", input_string);
-        return NULL;
-    }
-
-    return python_datetime(ds.year, ds.month, ds.day, ts.hour, ts.minute, ts.second, ts.microsecond);
+    return python_datetime(dt.date.year, dt.date.month, dt.date.day, dt.time.hour, dt.time.minute, dt.time.second, dt.time.microsecond);
 }
-#endif
 
 static PyObject*
 create_float(const char* input_string, Py_ssize_t input_size)
@@ -922,8 +996,7 @@ create_any(char field_type, const char* input_string, Py_ssize_t input_size)
             "`6` (`ipaddress.IPv6Address`), "
             "`n` (IPv4 or IPv6 address), "
             "`j` (serialized JSON) or "
-            "`_` (skip field)"
-        );
+            "`_` (skip field)");
         return NULL;
     }
 }
@@ -1259,8 +1332,7 @@ static struct PyModuleDef TsvParserModule = {
     "Parses TSV fields into a tuple of Python objects.",
     /* size of per-interpreter state of the module, or -1 if the module keeps state in global variables. */
     -1,
-    TsvParserMethods
-};
+    TsvParserMethods };
 
 #if defined(__GNUC__)
 __attribute__((visibility("default")))
