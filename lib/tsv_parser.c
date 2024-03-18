@@ -60,7 +60,7 @@ debug_print_256(__m256i value)
 #define PyTuple_GET_ITEM(tpl, index) PyTuple_GetItem(tpl, index)
 #endif
 
-inline bool
+static inline bool
 is_escaped(const char* data, Py_ssize_t size)
 {
 #if defined(__AVX2__)
@@ -170,7 +170,7 @@ static PyObject* datetime_constructor;
  */
 static int fractional_second_scales[] = { 1, 10, 100, 1000, 10000, 100000, 0, 0 };
 
-inline PyObject*
+static inline PyObject*
 python_date(int year, int month, int day)
 {
 #if defined(Py_LIMITED_API)
@@ -189,7 +189,7 @@ struct date_struct
 
 #if defined(__AVX2__)
 /** Parses an RFC 3339 date string with SIMD instructions. */
-inline bool
+static inline bool
 parse_date(const char* input_string, struct date_struct* ds)
 {
     char buf[16] = { 0 };
@@ -248,7 +248,7 @@ parse_date(const char* input_string, struct date_struct* ds)
     return true;
 }
 #else
-inline bool
+static inline bool
 parse_date(const char* input_string, struct date_struct* ds)
 {
     char* ym_sep_ptr;
@@ -286,7 +286,7 @@ create_date(const char* input_string, Py_ssize_t input_size)
     return python_date(ds.year, ds.month, ds.day);
 }
 
-inline PyObject*
+static inline PyObject*
 python_time(int hour, int minute, int second, int microsecond)
 {
 #if defined(Py_LIMITED_API)
@@ -296,7 +296,7 @@ python_time(int hour, int minute, int second, int microsecond)
 #endif
 }
 
-inline bool
+static inline bool
 is_valid_time(const char* input_string, Py_ssize_t input_size)
 {
     if (input_size < 9 || input_string[2] != ':' || input_string[5] != ':' || input_string[input_size - 1] != 'Z')
@@ -324,7 +324,7 @@ struct time_struct
     int microsecond;
 };
 
-inline bool
+static inline bool
 parse_time(const char* input_string, Py_ssize_t input_size, struct time_struct* ts)
 {
     char* hm_sep_ptr;
@@ -378,7 +378,7 @@ create_time(const char* input_string, Py_ssize_t input_size)
     return python_time(ts.hour, ts.minute, ts.second, ts.microsecond);
 }
 
-inline PyObject*
+static inline PyObject*
 python_datetime(int year, int month, int day, int hour, int minute, int second, int microsecond)
 {
 #if defined(Py_LIMITED_API)
@@ -398,7 +398,7 @@ struct datetime_struct
 /**
  * Validates a 16-byte partial date-time string `YYYY-MM-DDThh:mm`.
  */
-inline bool
+static inline bool
 is_valid_date_hour_minute(__m128i characters)
 {
     const __m128i lower_bound = _mm_setr_epi8(
@@ -439,7 +439,7 @@ is_valid_date_hour_minute(__m128i characters)
  *
  * @see https://movermeyer.com/2023-01-04-rfc-3339-simd/
  */
-inline bool
+static inline bool
 parse_datetime(const char* input_string, Py_ssize_t input_size, struct datetime_struct* dt)
 {
     if (input_size < 20 || input_size > 27)
@@ -500,7 +500,7 @@ parse_datetime(const char* input_string, Py_ssize_t input_size, struct datetime_
     return true;
 }
 #else
-inline bool
+static inline bool
 parse_datetime(const char* input_string, Py_ssize_t input_size, struct datetime_struct* dt)
 {
     const int DATE_LEN = 11;
@@ -552,7 +552,7 @@ create_float(const char* input_string, Py_ssize_t input_size)
     return PyFloat_FromDouble(value);
 }
 
-inline bool
+static inline bool
 parse_integer(const char* input_string, Py_ssize_t input_size, long* value)
 {
     char* end_ptr;
@@ -683,7 +683,7 @@ create_decimal(const char* input_string, Py_ssize_t input_size)
 typedef unsigned char uuid_t[16];
 
 #if defined(__AVX2__)
-inline __m128i
+static inline __m128i
 parse_uuid(__m256i x)
 {
     // Build a mask to apply a different offset to alphas and digits
@@ -712,7 +712,7 @@ parse_uuid(__m256i x)
     return _mm256_castsi256_si128(a);
 }
 
-inline bool
+static inline bool
 parse_uuid_compact(const char* str, uuid_t id)
 {
     const __m256i x = _mm256_loadu_si256((__m256i*)str);
@@ -728,7 +728,7 @@ parse_uuid_compact(const char* str, uuid_t id)
  *
  * @see https://github.com/crashoz/uuid_v4
  */
-inline bool
+static inline bool
 parse_uuid_rfc_4122(const char* str, uuid_t id)
 {
     // Remove dashes and pack hexadecimal ASCII bytes in a 256-bit integer
@@ -743,7 +743,7 @@ parse_uuid_rfc_4122(const char* str, uuid_t id)
     return true;
 }
 #else
-inline bool
+static inline bool
 parse_uuid_compact(const char* str, uuid_t id)
 {
     int n = 0;
@@ -761,7 +761,7 @@ parse_uuid_compact(const char* str, uuid_t id)
     return n == 32;
 }
 
-inline bool
+static inline bool
 parse_uuid_rfc_4122(const char* str, uuid_t id)
 {
     int n = 0;
@@ -1027,8 +1027,8 @@ tsv_parse_record(PyObject* self, PyObject* args)
 {
     const char* field_types;
     Py_ssize_t field_count;
-    PyObject* tsv_record;
-    PyObject* py_record;
+    PyObject* tsv_record = NULL;
+    PyObject* py_record = NULL;
 
     if (!PyArg_ParseTuple(args, "s#O", &field_types, &field_count, &tsv_record))
     {
@@ -1038,13 +1038,13 @@ tsv_parse_record(PyObject* self, PyObject* args)
     if (!PyTuple_Check(tsv_record))
     {
         PyErr_SetString(PyExc_TypeError, "expected: record as a tuple of field values");
-        return NULL;
+        goto error;
     }
 
     if (PyTuple_Size(tsv_record) != field_count)
     {
         PyErr_SetString(PyExc_ValueError, "expected: field type string length equal to record tuple size");
-        return NULL;
+        goto error;
     }
 
     py_record = PyTuple_New(field_count);
@@ -1058,27 +1058,33 @@ tsv_parse_record(PyObject* self, PyObject* args)
         if (!PyBytes_Check(tsv_field))
         {
             PyErr_SetString(PyExc_TypeError, "expected: field value as a `bytes` object");
-            Py_DECREF(py_record);
-            return NULL;
+            goto error;
         }
 
         if (PyBytes_AsStringAndSize(tsv_field, &input_string, &input_size) < 0)
         {
-            Py_DECREF(py_record);
-            return NULL;
+            goto error;
         }
 
         PyObject* py_field = create_optional_any(field_types[k], input_string, input_size);
         if (!py_field)
         {
-            Py_DECREF(py_record);
-            return NULL;
+            goto error;
         }
 
         PyTuple_SET_ITEM(py_record, k, py_field);
     }
 
     return py_record;
+
+error:
+    if (py_record != NULL) {
+        Py_DECREF(py_record);
+    }
+    if (tsv_record != NULL) {
+        Py_DECREF(tsv_record);
+    }
+    return NULL;
 }
 
 static PyObject*
@@ -1111,8 +1117,7 @@ parse_line(const char* field_types, Py_ssize_t field_count, const char* line_str
             PyObject* py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
             if (!py_field)
             {
-                Py_DECREF(py_record);
-                return NULL;
+                goto error;
             }
             PyTuple_SET_ITEM(py_record, field_index, py_field);
 
@@ -1120,8 +1125,7 @@ parse_line(const char* field_types, Py_ssize_t field_count, const char* line_str
             if (field_index >= field_count)
             {
                 PyErr_SetString(PyExc_ValueError, "too many fields in record input");
-                Py_DECREF(py_record);
-                return NULL;
+                goto error;
             }
 
             field_start = field_end + 1;
@@ -1137,8 +1141,7 @@ parse_line(const char* field_types, Py_ssize_t field_count, const char* line_str
         PyObject* py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
         if (!py_field)
         {
-            Py_DECREF(py_record);
-            return NULL;
+            goto error;
         }
         PyTuple_SET_ITEM(py_record, field_index, py_field);
 
@@ -1146,8 +1149,7 @@ parse_line(const char* field_types, Py_ssize_t field_count, const char* line_str
         if (field_index >= field_count)
         {
             PyErr_SetString(PyExc_ValueError, "too many fields in record input");
-            Py_DECREF(py_record);
-            return NULL;
+            goto error;
         }
 
         field_start = field_end + 1;
@@ -1158,7 +1160,7 @@ parse_line(const char* field_types, Py_ssize_t field_count, const char* line_str
     if (field_index != field_count - 1)
     {
         PyErr_SetString(PyExc_ValueError, "premature end of input when parsing record");
-        return NULL;
+        goto error;
     }
 
     field_end = line_string + line_size;
@@ -1166,12 +1168,15 @@ parse_line(const char* field_types, Py_ssize_t field_count, const char* line_str
     PyObject* py_field = create_optional_any_range(field_types[field_index], field_start, field_end);
     if (!py_field)
     {
-        Py_DECREF(py_record);
-        return NULL;
+        goto error;
     }
 
     PyTuple_SET_ITEM(py_record, field_index, py_field);
     return py_record;
+
+error:
+    Py_DECREF(py_record);
+    return NULL;
 }
 
 static PyObject*
@@ -1195,49 +1200,46 @@ tsv_parse_file(PyObject* self, PyObject* args)
 {
     const char* field_types;
     Py_ssize_t field_count;
-    PyObject* obj;
+    PyObject* file_object = NULL;
+    PyObject* read_method = NULL;
+    PyObject* result = NULL;
+    PyObject* data = NULL;
 
-    if (!PyArg_ParseTuple(args, "s#O", &field_types, &field_count, &obj))
+    if (!PyArg_ParseTuple(args, "s#O", &field_types, &field_count, &file_object))
     {
-        return NULL;
+        goto error;
     }
 
     /* get the `read` method of the passed object */
-    PyObject* read_method;
-    if ((read_method = PyObject_GetAttrString(obj, "read")) == NULL)
+    if ((read_method = PyObject_GetAttrString(file_object, "read")) == NULL)
     {
-        return NULL;
+        goto error;
     }
 
     char cache_data[8192];
     Py_ssize_t cache_size = 0;
 
-    PyObject* result = PyList_New(0);
+    result = PyList_New(0);
     while (true)
     {
         /* call `read()` */
-        PyObject* data;
         if ((data = PyObject_CallFunction(read_method, "i", 8192)) == NULL)
         {
-            Py_DECREF(result);
-            Py_DECREF(read_method);
-            return NULL;
+            goto error;
         }
 
         /* check for EOF */
         if (PySequence_Length(data) == 0)
         {
             Py_DECREF(data);
+            data = NULL;
             break;
         }
 
         if (!PyBytes_Check(data))
         {
-            Py_DECREF(data);
-            Py_DECREF(result);
-            Py_DECREF(read_method);
             PyErr_SetString(PyExc_IOError, "file must be opened in binary mode");
-            return NULL;
+            goto error;
         }
 
         /* extract underlying buffer data */
@@ -1259,7 +1261,7 @@ tsv_parse_file(PyObject* self, PyObject* args)
                 if (cache_size + chunk_size >= (Py_ssize_t)sizeof(cache_data))
                 {
                     PyErr_SetString(PyExc_RuntimeError, "insufficient cache size to load record");
-                    return NULL;
+                    goto error;
                 }
                 memcpy(cache_data + cache_size, buf_beg, chunk_size);
                 cache_size += chunk_size;
@@ -1277,10 +1279,7 @@ tsv_parse_file(PyObject* self, PyObject* args)
             PyObject* item = parse_line(field_types, field_count, line_string, line_size);
             if (!item)
             {
-                Py_DECREF(data);
-                Py_DECREF(result);
-                Py_DECREF(read_method);
-                return NULL;
+                goto error;
             }
 
             PyList_Append(result, item);
@@ -1297,18 +1296,19 @@ tsv_parse_file(PyObject* self, PyObject* args)
 
         /* cleanup */
         Py_DECREF(data);
+        data = NULL;
     }
 
     /* cleanup */
     Py_DECREF(read_method);
+    read_method = NULL;
 
     if (cache_size > 0)
     {
         PyObject* item = parse_line(field_types, field_count, cache_data, cache_size);
         if (!item)
         {
-            Py_DECREF(result);
-            return NULL;
+            goto error;
         }
 
         PyList_Append(result, item);
@@ -1316,6 +1316,21 @@ tsv_parse_file(PyObject* self, PyObject* args)
     }
 
     return result;
+
+error:
+    if (data != NULL) {
+        Py_DECREF(data);
+    }
+    if (result != NULL) {
+        Py_DECREF(result);
+    }
+    if (read_method != NULL) {
+        Py_DECREF(read_method);
+    }
+    if (file_object != NULL) {
+        Py_DECREF(file_object);
+    }
+    return NULL;
 }
 
 static PyMethodDef TsvParserMethods[] = {

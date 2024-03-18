@@ -301,6 +301,10 @@ class TestPerformance(unittest.TestCase):
         print(f"C extension took {time_c:.2f} s")
         print(f"{percent:.2f}% savings")
 
+    def test_parse_line_with_none(self) -> None:
+        for _ in range(self.iterations):
+            parse_line("ii", b"1\t\\N")
+
     def test_parse_file(self) -> None:
         data = b"\n".join(self.tester.tsv_line for _ in range(2))
         self.assertEqual(
