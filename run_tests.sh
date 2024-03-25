@@ -1,5 +1,7 @@
 set -e
 
+export MACOSX_DEPLOYMENT_TARGET=10.9
+
 rm -rf evaluate
 TSV_AVX2=0 python3 setup.py build --build-lib evaluate
 cp -R tests evaluate/

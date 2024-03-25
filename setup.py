@@ -34,14 +34,15 @@ if os.getenv("TSV_AVX2", "1") == "1":
 else:
     print("compiling without AVX2")
 
-define_macros: List[Tuple[str, Optional[str]]]
+define_macros: List[Tuple[str, Optional[str]]] = []
+if sys.platform.startswith("win"):
+    define_macros.append(("_WIN32_WINNT", "0x0603"))
 if os.getenv("TSV_LIMITED_API", "1") == "1":
     print("compiling with limited C API")
-    define_macros = [("Py_LIMITED_API", "0x03080000")]
+    define_macros.append(("Py_LIMITED_API", "0x03080000"))
     limited_api = True
 else:
     print("compiling with regular C API")
-    define_macros = []
     limited_api = False
 
 extension_modules = [
