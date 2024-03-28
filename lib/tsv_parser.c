@@ -19,34 +19,6 @@
 
 #if defined(__AVX2__)
 #include <immintrin.h>
-
-#ifdef _DEBUG
-static void
-debug_print_128(__m128i value)
-{
-    uint8_t str[16];
-    _mm_storeu_si128((__m128i*)str, value);
-
-    for (int i = 0; i < 16; i++)
-    {
-        printf("0x%.2x ", str[i]);
-    }
-    printf("\n");
-}
-
-static void
-debug_print_256(__m256i value)
-{
-    uint8_t str[32];
-    _mm256_storeu_si256((__m256i*)str, value);
-
-    for (int i = 0; i < 32; i++)
-    {
-        printf("0x%.2x ", str[i]);
-    }
-    printf("\n");
-}
-#endif
 #endif
 
 #if defined(__GNUC__)
@@ -1333,6 +1305,75 @@ error:
     return NULL;
 }
 
+#if defined(__AVX2__)
+struct cpu_regs
+{
+    unsigned int eax;
+    unsigned int ebx;
+    unsigned int ecx;
+    unsigned int edx;
+};
+
+union cpu_info
+{
+    struct cpu_regs s;
+    unsigned int a[4];
+};
+
+#if defined __has_builtin
+#if __has_builtin(__builtin_cpu_supports)
+#define BUILTIN_CPU_SUPPORTS
+#endif
+#endif
+
+#if !defined(BUILTIN_CPU_SUPPORTS)
+static struct cpu_regs cpu_id(unsigned int i)
+{
+    union cpu_info regs;
+#if defined(_WIN32)
+    __cpuid((int*)regs.a, (int)i);
+#elif defined(__cpuid)
+    __cpuid(i, regs.s.eax, regs.s.ebx, regs.s.ecx, regs.s.edx);
+#else
+    /* ECX is set to zero for CPUID function 4 */
+    __asm__ __volatile__("cpuid" : "=a" (regs.s.eax), "=b" (regs.s.ebx), "=c" (regs.s.ecx), "=d" (regs.s.edx) : "a" (i), "c" (0));
+#endif
+    return regs.s;
+}
+#endif
+
+static bool supports_avx()
+{
+#if defined(BUILTIN_CPU_SUPPORTS)
+    return __builtin_cpu_supports("avx");
+#else
+    struct cpu_regs regs = cpu_id(1);
+    return (regs.ecx & (1 << 28)) != 0 && (regs.ecx & (1 << 27)) != 0 && (regs.ecx & (1 << 26)) != 0;
+#endif
+}
+
+static bool supports_avx2()
+{
+#if defined(BUILTIN_CPU_SUPPORTS)
+    return __builtin_cpu_supports("avx2");
+#else
+    struct cpu_regs regs = cpu_id(7);
+    return (regs.ebx & (1 << 5)) != 0;
+#endif
+}
+
+static bool check_xcr0_ymm()
+{
+    uint32_t xcr0;
+#if defined(_MSC_VER)
+    xcr0 = (uint32_t)_xgetbv(0);  /* min VS2010 SP1 compiler is required */
+#else
+    __asm__ __volatile__("xgetbv" : "=a" (xcr0) : "c" (0) : "%edx");
+#endif
+    return ((xcr0 & 6) == 6); /* checking if xmm and ymm state are enabled in XCR0 */
+}
+#endif
+
 static PyMethodDef TsvParserMethods[] = {
     {"parse_record", tsv_parse_record, METH_VARARGS, "Parses a tuple of byte arrays representing a TSV record into a tuple of Python objects."},
     {"parse_line", tsv_parse_line, METH_VARARGS, "Parses a line representing a TSV record into a tuple of Python objects."},
@@ -1347,7 +1388,8 @@ static struct PyModuleDef TsvParserModule = {
     "Parses TSV fields into a tuple of Python objects.",
     /* size of per-interpreter state of the module, or -1 if the module keeps state in global variables. */
     -1,
-    TsvParserMethods };
+    TsvParserMethods
+};
 
 #if defined(__GNUC__)
 __attribute__((visibility("default")))
@@ -1355,6 +1397,14 @@ __attribute__((visibility("default")))
 PyMODINIT_FUNC
 PyInit_parser(void)
 {
+#if defined(__AVX2__)
+    if (!supports_avx() || !supports_avx2() || !check_xcr0_ymm())
+    {
+        PyErr_SetString(PyExc_RuntimeError, "tsv2py has been compiled with AVX2 instruction set enabled but AVX2 is not detected on this machine");
+        return NULL;
+    }
+#endif
+
     /* import module datetime */
 #if defined(Py_LIMITED_API)
     datetime_module = PyImport_ImportModule("datetime");
