@@ -133,13 +133,17 @@ class TestParseRecord(unittest.TestCase):
     def test_uuid(self) -> None:
         tsv_record = (
             b"f81d4fae7dec11d0a76500a0c91e6bf6",
+            b"F81D4FAE7DEC11D0A76500A0C91E6BF6",
             b"f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+            b"F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6",
         )
         py_record = (
             UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
             UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
+            UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
+            UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"),
         )
-        self.assertEqual(parse_record("uu", tsv_record), py_record)
+        self.assertEqual(parse_record("uuuu", tsv_record), py_record)
 
     def test_json(self) -> None:
         bs = "\\"  # a single backslash character
