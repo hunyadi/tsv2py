@@ -7,7 +7,7 @@ import sys
 import types
 import typing
 import uuid
-from typing import Any, BinaryIO, Dict, Iterable, List, Tuple, Union
+from typing import Any, BinaryIO, Dict, Iterable, List, Set, Tuple, Union
 
 from . import parser
 
@@ -84,7 +84,7 @@ def type_to_format_char(typ: type) -> str:
         return "4"
     elif typ is ipaddress.IPv6Address:
         return "6"
-    elif typ is list or typ is dict:  # serialized JSON
+    elif typ is list or typ is set or typ is dict:  # serialized JSON
         return "j"
     elif typ is type(None):
         return "_"
