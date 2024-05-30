@@ -25,12 +25,16 @@ if sys.platform.startswith("win"):
 else:
     compile_args = ["-fvisibility=hidden"]
 
+avx2_enabled = False
 if os.getenv("TSV_AVX2", "1") == "1":
-    print("compiling with AVX2")
     if sys.platform.startswith("win"):
+        avx2_enabled = True
         compile_args.append("/arch:AVX2")
-    else:
+    elif "x86_64" in os.uname().machine and "ARM" not in os.uname().version:
+        avx2_enabled = True
         compile_args.append("-mavx2")
+if avx2_enabled:
+    print("compiling with AVX2")
 else:
     print("compiling without AVX2")
 
