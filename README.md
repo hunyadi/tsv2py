@@ -4,6 +4,28 @@
 
 This package offers a high-performance alternative to convert data between a TSV text file and Python objects. The parser can read a TSV record into a Python tuple consisting of built-in Python types, one for each field. The generator can produce a TSV record from a tuple.
 
+## Installation
+
+Even though *tsv2py* contains native code, the package is already pre-built for several target architectures. In most cases, you can install directly from a binary wheel, selected automatically by `pip`:
+
+```sh
+python3 -m pip install tsv2py
+```
+
+If a binary wheel is not available for the target platform, `pip` will attempt to install *tsv2py* from the source distribution. This will build the package on the fly as part of the installation process, which requires a C compiler such as `gcc` or `clang`. The following commands install a C compiler and the Python development headers on AWS Linux:
+
+```sh
+sudo yum groupinstall -y "Development Tools"
+sudo yum install -y python3-devel python3-pip
+```
+
+If you lack a C compiler or the Python development headers, you will get error messages similar to the following:
+
+```
+error: command 'gcc' failed: No such file or directory
+lib/tsv_parser.c:2:10: fatal error: Python.h: No such file or directory
+```
+
 ## Quick start
 
 ```python
