@@ -9,7 +9,7 @@ import sys
 import types
 import typing
 import uuid
-from typing import Any, BinaryIO, Dict, Iterable, List, Set, Tuple, Union
+from typing import Any, BinaryIO, Dict, Iterable, List, Tuple, Union
 
 from . import parser
 

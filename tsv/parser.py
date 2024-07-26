@@ -6,11 +6,11 @@ from . import cpu_features
 
 if cpu_features.has_avx2():
     try:
-        from . import parser_avx2 as parser_native
+        from . import parser_avx2 as parser_native  # type: ignore
     except ImportError:
-        from . import parser_plain as parser_native
+        from . import parser_plain as parser_native  # type: ignore
 else:
-    from . import parser_plain as parser_native
+    from . import parser_plain as parser_native  # type: ignore
 
 
 def parse_record(field_types: str, record: Tuple[bytes, ...]) -> Tuple[Any, ...]:
@@ -40,7 +40,7 @@ def parse_record(field_types: str, record: Tuple[bytes, ...]) -> Tuple[Any, ...]
     :returns: A tuple of Python objects, each corresponding to the parsed value of a field.
     """
 
-    ...
+    raise NotImplementedError()
 
 
 def parse_line(field_types: str, line: bytes) -> Tuple[Any, ...]:
@@ -52,7 +52,7 @@ def parse_line(field_types: str, line: bytes) -> Tuple[Any, ...]:
     :returns: A tuple of Python objects, each corresponding to the parsed value of a field.
     """
 
-    ...
+    raise NotImplementedError()
 
 
 def parse_file(field_types: str, file: BinaryIO) -> List[Tuple[Any, ...]]:
@@ -64,7 +64,7 @@ def parse_file(field_types: str, file: BinaryIO) -> List[Tuple[Any, ...]]:
     :returns: A list of tuples, in which each tuple element is a Python object.
     """
 
-    ...
+    raise NotImplementedError()
 
 
 parse_record = parser_native.parse_record  # noqa: F811

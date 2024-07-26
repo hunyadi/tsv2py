@@ -241,7 +241,11 @@ class TestPerformance(unittest.TestCase):
         b"0.5",
         b"-56",
         "árvíztűrő \\r\\n tükörfúrógép".encode("utf=8"),
-        b"Etiam pulvinar diam et diam lacinia, in consectetur neque consequat. Cras pharetra ut metus ac lobortis. Vestibulum interdum euismod odio sed cursus. Integer orci magna, mollis et mattis non, dignissim eu ante. Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Maecenas sit amet lacinia enim. Quisque porttitor turpis eu tristique cursus. Pellentesque aliquam dui sit amet laoreet porta.",
+        b"Etiam pulvinar diam et diam lacinia, in consectetur neque consequat. Cras pharetra ut metus ac lobortis. "
+        b"Vestibulum interdum euismod odio sed cursus. Integer orci magna, mollis et mattis non, dignissim eu ante. "
+        b"Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Maecenas sit "
+        b"amet lacinia enim. Quisque porttitor turpis eu tristique cursus. Pellentesque aliquam dui sit amet laoreet "
+        b"porta.",
         str(UUID("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")).encode("ascii"),
         b"true",
         b"192.0.2.0",

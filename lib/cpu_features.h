@@ -11,6 +11,8 @@
 #include <immintrin.h>
 #endif
 
+#if defined(_WIN32) || defined(_WIN64) || defined(__i386__) || defined(__x86_64__)
+
 struct cpu_regs
 {
     unsigned int eax;
@@ -77,3 +79,22 @@ static inline bool check_xcr0_ymm()
 #endif
     return ((xcr0 & 6) == 6); /* checking if xmm and ymm state are enabled in XCR0 */
 }
+
+#else
+
+static inline bool supports_avx()
+{
+    return false;
+}
+
+static inline bool supports_avx2()
+{
+    return false;
+}
+
+static inline bool check_xcr0_ymm()
+{
+    return false;
+}
+
+#endif
