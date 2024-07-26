@@ -1,3 +1,5 @@
+"Utility classes and functions for parsing TSV fields into a tuple of Python objects."
+
 import datetime
 import decimal
 import enum

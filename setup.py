@@ -23,19 +23,19 @@ class bdist_wheel_abi3(bdist_wheel):
         return python, abi, plat
 
 
-if sys.platform.startswith("win"):
-    compile_args = []
-else:
-    compile_args = ["-fvisibility=hidden"]
+compile_args: List[str] = []
+if not sys.platform.startswith("win"):
+    compile_args.append("-fvisibility=hidden")
 
+avx2_args: List[str] = []
 avx2_enabled = False
 if os.getenv("TSV_AVX2", "1") == "1":
     if sys.platform.startswith("win"):
         avx2_enabled = True
-        compile_args.append("/arch:AVX2")
+        avx2_args.append("/arch:AVX2")
     elif "x86_64" in os.uname().machine and "ARM" not in os.uname().version:
         avx2_enabled = True
-        compile_args.append("-mavx2")
+        avx2_args.append("-mavx2")
 if avx2_enabled:
     print("compiling with AVX2")
 else:
@@ -54,16 +54,39 @@ else:
 
 extension_modules = [
     Extension(
-        "tsv.parser",
-        ["lib/tsv_parser.c"],
+        "tsv.cpu_features",
+        ["lib/cpu_features.c"],
         extra_compile_args=compile_args,
         extra_link_args=[],
         include_dirs=["lib"],
         define_macros=define_macros,
         language="c",
         py_limited_api=limited_api,
-    )
+    ),
+    Extension(
+        "tsv.parser_plain",
+        ["lib/tsv_parser.c"],
+        extra_compile_args=compile_args,
+        extra_link_args=[],
+        include_dirs=["lib"],
+        define_macros=define_macros + [("TSV_MODULE_FUNC", "PyInit_parser_plain")],
+        language="c",
+        py_limited_api=limited_api,
+    ),
 ]
+if avx2_enabled:
+    extension_modules.append(
+        Extension(
+            "tsv.parser_avx2",
+            ["lib/tsv_parser.c"],
+            extra_compile_args=compile_args + avx2_args,
+            extra_link_args=[],
+            include_dirs=["lib"],
+            define_macros=define_macros + [("TSV_MODULE_FUNC", "PyInit_parser_avx2")],
+            language="c",
+            py_limited_api=limited_api,
+        )
+    )
 
 if __name__ == "__main__":
     setup(

@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cpu_features.h"
+
 #if !defined(PY_MAJOR_VERSION) || !defined(PY_MINOR_VERSION) || PY_MAJOR_VERSION < 3 || (PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION < 8)
 #error This extension requires Python 3.8 or later.
 #endif
@@ -1334,75 +1336,6 @@ error:
     return NULL;
 }
 
-#if defined(__AVX2__)
-struct cpu_regs
-{
-    unsigned int eax;
-    unsigned int ebx;
-    unsigned int ecx;
-    unsigned int edx;
-};
-
-union cpu_info
-{
-    struct cpu_regs s;
-    unsigned int a[4];
-};
-
-#if defined __has_builtin
-#if __has_builtin(__builtin_cpu_supports)
-#define BUILTIN_CPU_SUPPORTS
-#endif
-#endif
-
-#if !defined(BUILTIN_CPU_SUPPORTS)
-static struct cpu_regs cpu_id(unsigned int i)
-{
-    union cpu_info regs;
-#if defined(_WIN32)
-    __cpuid((int*)regs.a, (int)i);
-#elif defined(__cpuid)
-    __cpuid(i, regs.s.eax, regs.s.ebx, regs.s.ecx, regs.s.edx);
-#else
-    /* ECX is set to zero for CPUID function 4 */
-    __asm__ __volatile__("cpuid" : "=a" (regs.s.eax), "=b" (regs.s.ebx), "=c" (regs.s.ecx), "=d" (regs.s.edx) : "a" (i), "c" (0));
-#endif
-    return regs.s;
-}
-#endif
-
-static bool supports_avx()
-{
-#if defined(BUILTIN_CPU_SUPPORTS)
-    return __builtin_cpu_supports("avx");
-#else
-    struct cpu_regs regs = cpu_id(1);
-    return (regs.ecx & (1 << 28)) != 0 && (regs.ecx & (1 << 27)) != 0 && (regs.ecx & (1 << 26)) != 0;
-#endif
-}
-
-static bool supports_avx2()
-{
-#if defined(BUILTIN_CPU_SUPPORTS)
-    return __builtin_cpu_supports("avx2");
-#else
-    struct cpu_regs regs = cpu_id(7);
-    return (regs.ebx & (1 << 5)) != 0;
-#endif
-}
-
-static bool check_xcr0_ymm()
-{
-    uint32_t xcr0;
-#if defined(_MSC_VER)
-    xcr0 = (uint32_t)_xgetbv(0);  /* min VS2010 SP1 compiler is required */
-#else
-    __asm__ __volatile__("xgetbv" : "=a" (xcr0) : "c" (0) : "%edx");
-#endif
-    return ((xcr0 & 6) == 6); /* checking if xmm and ymm state are enabled in XCR0 */
-}
-#endif
-
 static PyMethodDef TsvParserMethods[] = {
     {"parse_record", tsv_parse_record, METH_VARARGS, "Parses a tuple of byte arrays representing a TSV record into a tuple of Python objects."},
     {"parse_line", tsv_parse_line, METH_VARARGS, "Parses a line representing a TSV record into a tuple of Python objects."},
@@ -1420,11 +1353,16 @@ static struct PyModuleDef TsvParserModule = {
     TsvParserMethods
 };
 
+#if !defined(TSV_MODULE_FUNC)
+#define TSV_MODULE_FUNC PyInit_parser
+#endif
+
 #if defined(__GNUC__)
 __attribute__((visibility("default")))
 #endif
 PyMODINIT_FUNC
-PyInit_parser(void)
+TSV_MODULE_FUNC
+(void)
 {
 #if defined(__AVX2__)
     if (!supports_avx() || !supports_avx2() || !check_xcr0_ymm())

@@ -1,4 +1,17 @@
+"Parses TSV fields into a tuple of Python objects."
+
 from typing import Any, BinaryIO, List, Tuple
+
+from . import cpu_features
+
+if cpu_features.has_avx2():
+    try:
+        from . import parser_avx2 as parser_native
+    except ImportError:
+        from . import parser_plain as parser_native
+else:
+    from . import parser_plain as parser_native
+
 
 def parse_record(field_types: str, record: Tuple[bytes, ...]) -> Tuple[Any, ...]:
     """
@@ -29,6 +42,7 @@ def parse_record(field_types: str, record: Tuple[bytes, ...]) -> Tuple[Any, ...]
 
     ...
 
+
 def parse_line(field_types: str, line: bytes) -> Tuple[Any, ...]:
     """
     Parses a line representing a TSV record into a tuple of Python objects.
@@ -40,6 +54,7 @@ def parse_line(field_types: str, line: bytes) -> Tuple[Any, ...]:
 
     ...
 
+
 def parse_file(field_types: str, file: BinaryIO) -> List[Tuple[Any, ...]]:
     """
     Parses a TSV file into a list of tuples of Python objects.
@@ -50,3 +65,8 @@ def parse_file(field_types: str, file: BinaryIO) -> List[Tuple[Any, ...]]:
     """
 
     ...
+
+
+parse_record = parser_native.parse_record  # noqa: F811
+parse_line = parser_native.parse_line  # noqa: F811
+parse_file = parser_native.parse_file  # noqa: F811
