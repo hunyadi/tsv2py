@@ -12,10 +12,6 @@ on:
         description: 'Publish to GitHub'
         required: true
         default: false
-      tag:
-        description: 'Tag to publish'
-        required: false
-        default: '0.0.0'
 
 jobs:
   build:
@@ -31,7 +27,10 @@ jobs:
       - name: Install pypa/build
         run: |
           python3 -m pip install --user build cibuildwheel
-      - name: Build
+      - name: Create source distribution
+        run: |
+          python3 -m build --sdist --outdir wheelhouse
+      - name: Create binary distribution
         env:
           CIBW_PLATFORM: linux
           CIBW_ARCHS: x86_64
@@ -76,5 +75,5 @@ jobs:
       # sigstore-produced signatures and certificates.
       run: >-
         gh release create
-        '${{ inputs.tag }}' dist/**
+        `ls -1 dist/*.tar.gz | grep -Eo '[0-9]+[.][0-9]+[.][0-9]+'` dist/**
         --repo '${{ github.repository }}' --notes ''
