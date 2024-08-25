@@ -33,7 +33,6 @@ jobs:
       - name: Create binary distribution
         env:
           CIBW_PLATFORM: linux
-          CIBW_ARCHS: x86_64
         run: |
           cibuildwheel
       - name: Store the distribution packages
@@ -86,7 +85,6 @@ jobs:
       - name: Create binary distribution
         env:
           CIBW_PLATFORM: windows
-          CIBW_ARCHS: AMD64
         run: |
           cibuildwheel
       - name: Store the distribution packages

@@ -11,6 +11,11 @@
 #error This extension requires Python 3.8 or later.
 #endif
 
+// check if 64-bit SSE2 instructions are available
+#if (defined(__GNUC__) && (defined(__x86_64__) || defined(__ppc64__))) || defined(_WIN64)
+#define TSV2PY_64
+#endif
+
 #if defined(_WIN32) || defined(_WIN64)
 #define WIN32_LEAN_AND_MEAN
 #include <ws2tcpip.h>
@@ -214,7 +219,14 @@ parse_date(const char* input_string, struct date_struct* ds)
         char c[8];
         int64_t i;
     } value;
+
+#if defined(TSV2PY_64)
+    // 64-bit SSE2 instruction
     value.i = _mm_cvtsi128_si64(grouped_integers);
+#else
+    // equivalent 32-bit SSE2 instruction
+    _mm_storeu_si64(value.c, grouped_integers);
+#endif
 
     ds->year = 1000 * value.c[0] + 100 * value.c[1] + 10 * value.c[2] + value.c[3];
     ds->month = 10 * value.c[4] + value.c[5];
