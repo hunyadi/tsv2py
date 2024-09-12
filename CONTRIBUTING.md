@@ -68,5 +68,5 @@ abi3audit wheelhouse/*-cp3*.whl
 Finally, use `scp` to copy files from Amazon Linux to a local computer. `1.2.3.4` stands for the IP address of the EC2 machine. `tsv2py.pem` is a certificate to connect to the remote EC2 machine.
 
 ```sh
-scp -i ~/.ssh/tsv2py.pem ec2-user@1.2.3.4:/home/ec2-user/tsv2py/wheelhouse/ wheelhouse
+scp -r -i ~/.ssh/tsv2py.pem ec2-user@1.2.3.4:/home/ec2-user/tsv2py/wheelhouse/ wheelhouse
 ```

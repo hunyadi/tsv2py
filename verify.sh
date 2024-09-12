@@ -1,9 +1,11 @@
 set -e
 
-python3 -m mypy tsv
-python3 -m flake8 tsv
-python3 -m mypy tests
-python3 -m flake8 tests
+PYTHON=python3
+
+$PYTHON -m mypy tsv
+$PYTHON -m flake8 tsv
+$PYTHON -m mypy tests
+$PYTHON -m flake8 tests
 
 docker build --build-arg PYTHON_VERSION=3.8 .
 docker build --build-arg PYTHON_VERSION=3.9 .
