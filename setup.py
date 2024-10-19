@@ -6,7 +6,7 @@ import sys
 from typing import List, Optional, Tuple
 
 from setuptools import Extension, setup
-from wheel.bdist_wheel import bdist_wheel
+from setuptools.command.bdist_wheel import bdist_wheel
 
 if sys.version_info < (3, 8):
     raise RuntimeError("tsv2py requires Python 3.8 or later")
